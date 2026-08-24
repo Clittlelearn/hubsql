@@ -1,0 +1,18 @@
+# 构建产物
+build/
+cmake-build-*/
+
+# 运行产物
+logs/
+*.log
+
+# MySQL 便携部署运行数据（保留脚本与配置）
+deploy/mysql-portable/bin/
+deploy/mysql-portable/lib/
+deploy/mysql-portable/share/
+deploy/mysql-portable/data/
+deploy/mysql-portable/run/
+
+# IDE
+.vscode/
+.idea/

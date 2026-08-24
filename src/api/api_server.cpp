@@ -1,0 +1,172 @@
+#include "api/api_server.h"
+
+#include <cstdlib>
+#include <cstdint>
+#include <string>
+
+#include <crow.h>
+
+#include "api/controllers/balance_controller.h"
+#include "api/controllers/block_controller.h"
+#include "api/controllers/business_controller.h"
+#include "api/controllers/tx_controller.h"
+#include "api/response.h"
+#include "common/logger.h"
+
+namespace hubsql {
+
+namespace {
+
+// 查询参数读取辅助
+int GetInt(const crow::request& req, const char* key, int def) {
+    const char* v = req.url_params.get(key);
+    return v ? std::atoi(v) : def;
+}
+
+uint64_t GetU64(const crow::request& req, const char* key, uint64_t def) {
+    const char* v = req.url_params.get(key);
+    return v ? std::strtoull(v, nullptr, 10) : def;
+}
+
+std::string GetStr(const crow::request& req, const char* key,
+                   const std::string& def = "") {
+    const char* v = req.url_params.get(key);
+    return v ? std::string(v) : def;
+}
+
+// 统一 JSON 响应
+crow::response JsonRespond(const nlohmann::json& body) {
+    crow::response r(200, body.dump());
+    r.add_header("Content-Type", "application/json");
+    return r;
+}
+
+}  // namespace
+
+struct ApiServer::Impl {
+    ApiConfig cfg;
+    crow::SimpleApp app;
+};
+
+ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
+                     BlockRepo& blocks, TxRepo& txs, BusinessRegistry& registry,
+                     BalanceRepo& balances)
+    : impl_(std::make_unique<Impl>()) {
+    impl_->cfg = cfg;
+    BlockController block_ctrl(blocks);
+    TxController tx_ctrl(txs);
+    BusinessController business_ctrl(registry, blocks, txs);
+    BalanceController balance_ctrl(balances);
+
+    // ---- 健康检查 ----
+    impl_->app.route_dynamic("/health")([](const crow::request&) {
+        return JsonRespond(Ok({{"status", "healthy"}}));
+    });
+
+    // ---- 区块 ----
+    impl_->app.route_dynamic("/api/v1/blocks")
+        .methods(crow::HTTPMethod::GET)(
+            [block_ctrl](const crow::request& req) mutable {
+                return JsonRespond(block_ctrl.List(
+                    GetU64(req, "start", 0), GetU64(req, "end", UINT64_MAX),
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+    impl_->app.route_dynamic("/api/v1/blocks/<uint>")
+        .methods(crow::HTTPMethod::GET)(
+            [block_ctrl](const crow::request&, uint64_t height) mutable {
+                return JsonRespond(block_ctrl.Detail(height));
+            });
+
+    // ---- 交易 ----
+    impl_->app.route_dynamic("/api/v1/txs")
+        .methods(crow::HTTPMethod::GET)(
+            [tx_ctrl](const crow::request& req) mutable {
+                return JsonRespond(tx_ctrl.List(
+                    GetStr(req, "type"), GetStr(req, "address"),
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+    impl_->app.route_dynamic("/api/v1/txs/<string>")
+        .methods(crow::HTTPMethod::GET)(
+            [tx_ctrl](const crow::request&, std::string tx_hash) mutable {
+                return JsonRespond(tx_ctrl.Detail(tx_hash));
+            });
+
+    // ---- 业务数据（注册制：按注册的业务模块名分发）----
+    // 通用: /api/v1/business/{name}?address=&is_unstaked=&page=&size=
+    // 别名: /api/v1/staking /api/v1/unstaking /api/v1/investments
+    auto build_filter = [](const crow::request& req) {
+        nlohmann::json f = nlohmann::json::object();
+        if (req.url_params.get("address"))
+            f["address"] = GetStr(req, "address");
+        if (req.url_params.get("is_unstaked"))
+            f["is_unstaked"] = GetInt(req, "is_unstaked", -1);
+        return f;
+    };
+
+    impl_->app.route_dynamic("/api/v1/business/<string>")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl, build_filter](const crow::request& req,
+                                          std::string name) mutable {
+                return JsonRespond(business_ctrl.List(
+                    name, build_filter(req),
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+    impl_->app.route_dynamic("/api/v1/staking")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl, build_filter](const crow::request& req) mutable {
+                return JsonRespond(business_ctrl.List(
+                    "staking", build_filter(req),
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+    impl_->app.route_dynamic("/api/v1/unstaking")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl, build_filter](const crow::request& req) mutable {
+                nlohmann::json f = build_filter(req);
+                f["is_unstaked"] = 1;  // 已解质押视图
+                return JsonRespond(business_ctrl.List(
+                    "staking", f,
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+    impl_->app.route_dynamic("/api/v1/investments")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl, build_filter](const crow::request& req) mutable {
+                return JsonRespond(business_ctrl.List(
+                    "investment", build_filter(req),
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+
+    // ---- 统计（聚合所有已注册业务模块）----
+    impl_->app.route_dynamic("/api/v1/stats/overview")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl](const crow::request&) mutable {
+                return JsonRespond(business_ctrl.Stats());
+            });
+
+    // ---- 账户余额 ----
+    impl_->app.route_dynamic("/api/v1/balances")
+        .methods(crow::HTTPMethod::GET)(
+            [balance_ctrl](const crow::request& req) mutable {
+                return JsonRespond(balance_ctrl.List(
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+    impl_->app.route_dynamic("/api/v1/balances/<string>")
+        .methods(crow::HTTPMethod::GET)(
+            [balance_ctrl](const crow::request&, std::string address) mutable {
+                return JsonRespond(balance_ctrl.Get(address));
+            });
+
+    impl_->app.port(cfg.port).bindaddr(cfg.host).multithreaded();
+}
+
+ApiServer::~ApiServer() = default;
+
+void ApiServer::Run() {
+    LOG_INFO("REST API 启动: {}:{}", impl_->cfg.host, impl_->cfg.port);
+    impl_->app.run();
+}
+
+void ApiServer::Stop() {
+    impl_->app.stop();
+}
+
+}  // namespace hubsql

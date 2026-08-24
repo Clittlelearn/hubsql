@@ -1,0 +1,34 @@
+我修改了src/model/ 交易模型，使用的是utxo 的账户模模型，并将所有需要的字段全部序列化了，其他的字段无关紧要不需要关心
+print_block_0_35.json 有此链的块结构数据，现在最总要的一步是正确的解析出所有账户的余额，并存入到msql （新建一张用于查询的余额的表）
+由于是UTXO的账户模型，因此解析块的时候需要用到 KV 数据库存储和删除UTXO ，就用rocksdb。
+
+
+
+
+## Get
+http://127.0.0.1:13134/GetBlockHeight 
+
+
+##Post
+
+http://127.0.0.1:13134/GetBlockByHeight
+
+{
+  "id": "1",
+  "jsonrpc": "2.0",
+  "method": "GetBlockByHeight",
+  "params": {
+    "begin": 0,
+    "end": 2
+  }
+}
+
+删除数据库中的旧质押表
+创建一张表负责存储质押数据，需要字段质：
+    押金额，
+    质押时间，
+    是否已经解质押（如果解质押不删除记录只是将这个字段标注为解质押）
+    佣金率（commissionRate）
+    质押类型
+    质押hash
+完成质押解质押的解析，并接入REST API

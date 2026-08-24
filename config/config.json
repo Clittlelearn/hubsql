@@ -1,0 +1,24 @@
+{
+  "chain": {
+    "base_url": "http://127.0.0.1:13134",
+    "start_height": 0,
+    "sync_interval_seconds": 3,
+    "batch_size": 50,
+    "http": { "timeout_ms": 10000, "retry": 3, "max_retry_wait_ms": 60000 }
+  },
+  "mysql": {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "hubsql",
+    "password": "hubsql123456",
+    "database": "hubsql",
+    "pool_size": 10
+  },
+  "api": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "threads": 4
+  },
+  "log": { "level": "info", "file": "./logs/hubsql.log" },
+  "rocksdb": { "path": "./data/utxo" }
+}
