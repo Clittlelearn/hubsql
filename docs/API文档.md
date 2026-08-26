@@ -43,6 +43,8 @@
 
 - **时间戳**：均为**微秒**（微秒级 Unix 时间戳，`1787278243920870` ≈ 2026-08）。前端展示时除以 `1_000_000` 转毫秒/秒。
 - **金额**：均以**十进制字符串**返回，且带 **18 位小数**（`"10000000000000.000000000000000000"`）。前端需按字符串处理避免精度丢失；如展示为整数，可去掉小数点及小数部分（注意部分金额本身含小数）。
+- **余额**：整数（BIGINT），**按（地址, 资产类型）分别存储**，单位与链上一致；列表项含 `asset_type` 字段。
+- **资产类型**：`OHI`（原生资产）或合约/提案 hash；余额、锁定、合约跃入跃出、申领等接口均可能涉及。
 - **hash/地址**：均为 `0x` 开头的小写十六进制字符串（提案的资产名特殊值为 `"OHI"`）。
 - **`is_xxx` 布尔字段**：true/false。
 
@@ -77,8 +79,10 @@ GET /api/v1/business/{name}
 | GET | `/api/v1/txrecords` | 交易记录（仅保留最新 20 个高度） |
 | GET | `/api/v1/contracts` | 合约交易（部署/调用，含跃入跃出） |
 | GET | `/api/v1/claims` | 申领记录 |
-| GET | `/api/v1/balances` | 账户余额列表（按余额降序） |
-| GET | `/api/v1/balances/{address}` | 单地址余额 |
+| GET | `/api/v1/balances?asset_type=` | 账户余额列表（按余额降序，按资产类型） |
+| GET | `/api/v1/balances/{address}?asset_type=` | 单地址 OHI/提案资产余额 |
+| POST | `/api/v1/accounts/{address}/erc20-contracts` | 关联账号与链上 ERC20 合约 |
+| GET | `/api/v1/accounts/{address}/erc20-balances` | 查询账号已关联 ERC20 余额 |
 | GET | `/api/v1/stats/overview` | 全局统计 |
 | GET | `/api/v1/business/{name}` | 通用业务路由 |
 
@@ -495,37 +499,84 @@ GET /api/v1/claims?address=&asset_type=&page=&size=
 ### 11.1 余额列表（按余额降序）
 
 ```
-GET /api/v1/balances?page=&size=
+GET /api/v1/balances?asset_type=&page=&size=
 ```
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `asset_type` | string | 按资产类型过滤（`OHI` 或 hash），为空 = 全部资产 |
+
+> 链上余额按 **（地址, 资产类型）** 分别存储；同一地址可有多种资产余额。
 
 ```json
 {
   "code": 0,
   "data": {
     "list": [
-      { "address": "0x755Ccf704E17570b64E247f0794314e4C8E542CA", "balance": 4149999900000000 },
-      { "address": "0x2E08bA82dcF52966dF03Aa0fd830aFAb70d8911d", "balance": 139999999814600 },
-      { "address": "0x03bEE3dB52E736B6422DaC4668CC784d05cb2e63", "balance": 40065143074938 }
+      { "address": "0x755Ccf704E17570b64E247f0794314e4C8E542CA", "asset_type": "OHI", "balance": 4149999900000000 },
+      { "address": "0x2E08bA82dcF52966dF03Aa0fd830aFAb70d8911d", "asset_type": "OHI", "balance": 139999999814600 }
     ],
-    "total": 8, "page": 1, "size": 3
+    "total": 8, "page": 1, "size": 2
   },
   "message": "ok"
 }
 ```
 
-- `balance`：整数（BIGINT），**单位与链上一致**（OHI 最小单位，非 18 位小数；直接作为整数展示/计算即可，与节点 `GetBalance` 逐位一致）。
+- `balance`：整数（BIGINT），**单位与链上一致**（OHI 最小单位，直接作为整数展示/计算，与节点 `GetBalance` 逐位一致）。
+- `asset_type`：该余额所属资产类型。
 
 ### 11.2 单地址余额
 
 ```
-GET /api/v1/balances/{address}
+GET /api/v1/balances/{address}?asset_type=
 ```
+
+- 不带 `asset_type`：返回该地址**全部资产**的余额数组：
 
 ```json
 {
   "code": 0,
   "data": {
     "address": "0x755Ccf704E17570b64E247f0794314e4C8E542CA",
+    "balances": [
+      { "asset_type": "OHI", "balance": 4149999900000000 }
+    ]
+  },
+  "message": "ok"
+}
+```
+
+### 11.3 关联 ERC20 合约
+
+```http
+POST /api/v1/accounts/0x1111111111111111111111111111111111111111/erc20-contracts
+Content-Type: application/json
+
+{"contract_address":"0x2222222222222222222222222222222222222222"}
+```
+
+账号和合约地址必须是 20 字节 `0x` 地址；合约必须已被区块同步器识别为 ERC20。重复请求幂等。
+
+### 11.4 查询已关联 ERC20 余额
+
+```http
+GET /api/v1/accounts/0x1111111111111111111111111111111111111111/erc20-balances
+```
+
+```json
+{"code":0,"message":"ok","data":{"address":"0x1111111111111111111111111111111111111111","balances":[{"contract_address":"0x2222222222222222222222222222222222222222","balance":"1000000000000000000"}]}}
+```
+
+ERC20 `balance` 始终是十进制字符串，以完整支持 Solidity `uint256`。同步器从成功执行的 `Transfer` 日志更新余额：部署时的初始铸币和合约调用转账都会被计入。
+
+- 带 `asset_type=OHI`：返回指定资产余额：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "address": "0x755Ccf704E17570b64E247f0794314e4C8E542CA",
+    "asset_type": "OHI",
     "balance": 4149999900000000
   },
   "message": "ok"

@@ -8,16 +8,20 @@
 
 namespace hubsql {
 
-// 账户余额查询控制器
+// 账户余额查询控制器（按地址 + 资产类型）
 class BalanceController {
 public:
     explicit BalanceController(BalanceRepo& repo);
 
-    // 全部余额（分页，按余额降序）
-    nlohmann::json List(int page, int size);
+    // 全部余额（分页，按余额降序）；asset_type 为空 = 全部资产
+    nlohmann::json List(const std::string& asset_type, int page, int size);
 
-    // 单地址余额
-    nlohmann::json Get(const std::string& address);
+    // 单地址余额；asset_type 为空 = 返回该地址全部资产，否则返回指定资产
+    nlohmann::json Get(const std::string& address, const std::string& asset_type);
+
+    nlohmann::json AssociateErc20(const std::string& address,
+                                  const std::string& contract_address);
+    nlohmann::json ListErc20(const std::string& address);
 
 private:
     BalanceRepo& repo_;

@@ -1,7 +1,7 @@
 // 端到端余额验证工具（直连链节点）
 // 用法: hubsql_verify_balance <config.json>
 // 用真实生产流水线(BlockFetcher -> BlockParser -> RocksDB -> MySQL)处理链上全部区块，
-// 输出 account_balances。
+// 输出 OHI/提案资产余额表的联合视图。
 #include <iostream>
 
 #include "common/config.h"
@@ -76,11 +76,13 @@ int main(int argc, char** argv) {
         std::cout << "\n共处理 " << blocks.size() << " 个区块\n";
         std::cout << "RocksDB 未消费输出数: " << store.Count() << "\n";
         auto all = balance_repo.ListAll();
-        std::cout << "=== account_balances (" << all.size() << " 个账户) ===\n";
-        for (const auto& [addr, bal] : all) {
-            std::cout << addr << "  " << bal << "\n";
+        std::cout << "=== native/proposal balances (" << all.size() << " 条) ===\n";
+        for (const auto& item : all) {
+            std::cout << item.address << "  [" << item.asset_type << "]  "
+                      << item.balance << "\n";
         }
-        std::cout << "总余额: " << balance_repo.TotalBalance() << "\n";
+        std::cout << "总余额: " << balance_repo.TotalBalance()
+                  << " (OHI: " << balance_repo.TotalBalance("OHI") << ")\n";
     } catch (const std::exception& e) {
         std::cerr << "FATAL: " << e.what() << "\n";
         return 1;

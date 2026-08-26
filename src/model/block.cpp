@@ -27,6 +27,10 @@ Block Block::FromJson(const nlohmann::json& j) {
     block.blocks.merkleRoot = hdr.value("merkleRoot", "");
     block.blocks.prevHash   = hdr.value("prevHash", "");
     block.blocks.time       = hdr.value("time", 0ULL);
+    if (hdr.contains("data") && hdr.at("data").is_object())
+        block.execution_data = hdr.at("data");
+    else
+        block.execution_data = nlohmann::json::object();
 
     // 交易
     for (const auto& tj : j.value("txs", nlohmann::json::array())) {

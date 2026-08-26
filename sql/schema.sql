@@ -79,13 +79,45 @@ CREATE TABLE IF NOT EXISTS sync_status (
     updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB COMMENT='同步进度';
 
--- 账户余额表（UTXO 未花费真实输出的汇总，供前端查询）
-CREATE TABLE IF NOT EXISTS account_balances (
+-- 三类余额分表：原生 OHI、其他提案资产、EVM ERC20
+CREATE TABLE IF NOT EXISTS ohi_balances (
     address    VARCHAR(128) PRIMARY KEY,
     balance    BIGINT NOT NULL DEFAULT 0,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    KEY idx_balance (balance)
-) ENGINE=InnoDB COMMENT='账户余额';
+    KEY idx_ohi_balance (balance)
+) ENGINE=InnoDB COMMENT='OHI 原生资产余额';
+
+CREATE TABLE IF NOT EXISTS proposal_asset_balances (
+    address VARCHAR(128) NOT NULL, asset_type VARCHAR(128) NOT NULL COMMENT '提案 hash',
+    balance BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (address, asset_type), KEY idx_proposal_asset (asset_type, balance)
+) ENGINE=InnoDB COMMENT='其他提案跃入资产余额';
+
+CREATE TABLE IF NOT EXISTS erc20_contracts (
+    contract_address VARCHAR(42) PRIMARY KEY, deploy_tx_hash VARCHAR(128) NOT NULL DEFAULT '',
+    deployer_address VARCHAR(128) NOT NULL DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB COMMENT='链上 ERC20 合约';
+
+-- uint256 最大 78 位，MySQL DECIMAL 最大 65 位，因此以十进制字符串无损存储
+CREATE TABLE IF NOT EXISTS erc20_balances (
+    contract_address VARCHAR(42) NOT NULL, account_address VARCHAR(42) NOT NULL,
+    balance VARCHAR(78) NOT NULL DEFAULT '0',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (contract_address, account_address), KEY idx_erc20_account (account_address)
+) ENGINE=InnoDB COMMENT='ERC20 合约内余额';
+
+CREATE TABLE IF NOT EXISTS erc20_transfer_events (
+    tx_hash VARCHAR(128) NOT NULL, log_index INT UNSIGNED NOT NULL,
+    contract_address VARCHAR(42) NOT NULL,
+    PRIMARY KEY (tx_hash, log_index)
+) ENGINE=InnoDB COMMENT='ERC20 Transfer 去重记录';
+
+CREATE TABLE IF NOT EXISTS account_erc20_contracts (
+    account_address VARCHAR(42) NOT NULL, contract_address VARCHAR(42) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (account_address, contract_address), KEY idx_account_contract (contract_address)
+) ENGINE=InnoDB COMMENT='用户账号与 ERC20 合约关联';
 
 -- 初始化同步进度（仅当表为空时插入）
 INSERT IGNORE INTO sync_status (id, last_synced_height, status)

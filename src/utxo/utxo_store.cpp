@@ -35,8 +35,10 @@ std::string UtxoStore::MakeKey(const std::string& h, uint32_t ui, uint32_t vj) {
 }
 
 void UtxoStore::Put(const std::string& tx_hash, uint32_t utxo_i, uint32_t vout_j,
-                    const std::string& addr, const std::string& value) {
-    nlohmann::json v{{"addr", addr}, {"value", value}};
+                    const std::string& addr, const std::string& value,
+                    const std::string& asset_type) {
+    nlohmann::json v{
+        {"addr", addr}, {"value", value}, {"assetType", asset_type}};
     rocksdb::Status st =
         db_->Put(rocksdb::WriteOptions(), MakeKey(tx_hash, utxo_i, vout_j), v.dump());
     if (!st.ok()) {
@@ -77,6 +79,7 @@ std::vector<UtxoOut> UtxoStore::GetUnspentByTx(const std::string& tx_hash) const
             auto j = nlohmann::json::parse(it->value().ToString());
             o.addr = j.value("addr", "");
             o.value = j.value("value", "0");
+            o.asset_type = j.value("assetType", "");
         } catch (...) {
             continue;
         }

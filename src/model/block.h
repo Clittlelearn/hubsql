@@ -26,8 +26,9 @@ struct BlockHeader {
 struct Block {
     BlockHeader blocks;
     std::vector<Transaction> txs;
+    nlohmann::json execution_data;  // blocks.data: txHash -> EVM execution result
 
-    REFLECT(blocks, txs)
+    REFLECT(blocks, txs, execution_data)
 
     static Block FromJson(const nlohmann::json& j);
     nlohmann::json ToJson() const;

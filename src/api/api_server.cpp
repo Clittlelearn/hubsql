@@ -244,12 +244,30 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
         .methods(crow::HTTPMethod::GET)(
             [balance_ctrl](const crow::request& req) mutable {
                 return JsonRespond(balance_ctrl.List(
+                    GetStr(req, "asset_type"),
                     GetInt(req, "page", 1), GetInt(req, "size", 20)));
             });
     impl_->app.route_dynamic("/api/v1/balances/<string>")
         .methods(crow::HTTPMethod::GET)(
+            [balance_ctrl](const crow::request& req, std::string address) mutable {
+                return JsonRespond(balance_ctrl.Get(
+                    address, GetStr(req, "asset_type")));
+            });
+
+    // 用户显式关联后，才在账户 ERC20 余额列表中展示该合约。
+    impl_->app.route_dynamic("/api/v1/accounts/<string>/erc20-contracts")
+        .methods(crow::HTTPMethod::POST)(
+            [balance_ctrl](const crow::request& req, std::string address) mutable {
+                try {
+                    auto body = nlohmann::json::parse(req.body);
+                    return JsonRespond(balance_ctrl.AssociateErc20(
+                        address, body.value("contract_address", "")));
+                } catch (...) { return JsonRespond(Err(400, "invalid JSON body")); }
+            });
+    impl_->app.route_dynamic("/api/v1/accounts/<string>/erc20-balances")
+        .methods(crow::HTTPMethod::GET)(
             [balance_ctrl](const crow::request&, std::string address) mutable {
-                return JsonRespond(balance_ctrl.Get(address));
+                return JsonRespond(balance_ctrl.ListErc20(address));
             });
 
     impl_->app.port(cfg.port).bindaddr(cfg.host).multithreaded();

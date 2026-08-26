@@ -26,6 +26,10 @@ void BlockParser::ParseAndStore(const Block& block) {
         conn.setAutoCommit(false);
         try {
             for (const auto& tx : block.txs) {
+                // ERC20 余额与业务记录共用区块事务，失败时一起回滚。
+                balance_repo_.ApplyErc20Transfers(
+                    conn, tx, block.execution_data.value(
+                        tx.hash, nlohmann::json::object()));
                 biz += registry_.ProcessTransaction(conn, tx, block.blocks.height);
             }
             // 每块结束后回调所有模块（如交易记录滚动清理）

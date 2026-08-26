@@ -22,9 +22,9 @@ def rpc(method, params):
     )
     return json.loads(urllib.request.urlopen(req, timeout=20).read())
 
-# 我们 MySQL 中的余额
+# 我们 MySQL 中的 OHI 余额
 import subprocess
-sql = "SELECT address, balance FROM account_balances;"
+sql = "SELECT address, balance FROM account_balances WHERE asset_type = 'OHI';"
 out = subprocess.run(
     ["./deploy/mysql-portable/bin/mysql", "-uhubsql", "-phubsql123456",
      "-h127.0.0.1", "-P3306", "hubsql", "-N", "-e", sql],
