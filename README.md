@@ -121,7 +121,11 @@ REST API 自动获得通用路由 `/api/v1/business/{name}`，并可加别名路
 | GET | `/api/v1/txs/{tx_hash}` | 交易详情 |
 | GET | `/api/v1/staking?address=&is_unstaked=&page=&size=` | 质押记录（金额/时间/佣金率/类型/解质押标记） |
 | GET | `/api/v1/unstaking?address=&page=&size=` | 已解质押记录（`is_unstaked=1` 视图） |
-| GET | `/api/v1/investments?address=&page=&size=` | 投资记录 |
+| GET | `/api/v1/investments?address=&is_deinvested=&page=&size=` | 投资记录（金额/时间/bonusAddr/类型/解投资标记） |
+| GET | `/api/v1/deinvestments?address=&page=&size=` | 已解投资记录（`is_deinvested=1` 视图） |
+| GET | `/api/v1/proposals?address=&is_revoked=&page=&size=` | 提案记录（txInfo/投票数/是否第一笔/撤销标记） |
+| GET | `/api/v1/revokedproposals?address=&page=&size=` | 已撤销提案视图（`is_revoked=1`） |
+| GET | `/api/v1/votes?address=&proposal_hash=&page=&size=` | 投票记录（被投票提案/类型/投票类型/票数） |
 | GET | `/api/v1/stats/overview` | 全局统计 |
 
 统一响应结构：`{"code": 0, "message": "ok", "data": {...}}`

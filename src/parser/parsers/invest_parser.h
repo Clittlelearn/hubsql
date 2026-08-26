@@ -8,11 +8,11 @@
 
 namespace hubsql {
 
-// 投资交易解析器（链暂无 invest 类型，保留扩展用；type 标记与 UNSTAKE=3 相同，
-// 因此不注册进主流水线，避免把解质押交易误判为投资）
+// 投资交易解析器（type=4 DELEGATE）
+// data.txInfo: {"bonusAddr": "...", "delegateAmount": ..., "delegateType": "Normal"}
 class InvestParser {
 public:
-    std::string GetTxType() const { return "3"; }
+    std::string GetTxType() const { return "4"; }
 
     std::vector<InvestmentRecord> Parse(const Transaction& tx);
 };

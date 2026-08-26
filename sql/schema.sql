@@ -50,19 +50,26 @@ CREATE TABLE IF NOT EXISTS staking_records (
     KEY idx_is_unstaked (is_unstaked)
 ) ENGINE=InnoDB COMMENT='质押记录(解质押以标记形式存在)';
 
--- 投资业务表
+-- 投资业务表（投资=DELEGATE(type4)、解投资=UNDELEGATE(type5)，解投资仅标记不删除）
 CREATE TABLE IF NOT EXISTS investment_records (
-    id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    tx_hash      VARCHAR(128) NOT NULL,
-    block_height BIGINT UNSIGNED NOT NULL,
-    address      VARCHAR(128) NOT NULL,
-    amount       DECIMAL(36, 18) NOT NULL DEFAULT 0,
-    product_id   VARCHAR(64) DEFAULT NULL COMMENT '投资产品ID(业务专属字段)',
-    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    id                BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tx_hash           VARCHAR(128) NOT NULL COMMENT '投资交易hash',
+    block_height      BIGINT UNSIGNED NOT NULL COMMENT '投资所在区块高度',
+    address           VARCHAR(128) NOT NULL COMMENT '投资地址',
+    invest_amount     DECIMAL(36, 18) NOT NULL DEFAULT 0 COMMENT '投资金额',
+    invest_time       BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '投资时间(微秒)',
+    bonus_addr        VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'bonusAddr(被投资地址)',
+    invest_type       VARCHAR(32) NOT NULL DEFAULT '' COMMENT '投资类型(如 Normal)',
+    is_deinvested     TINYINT NOT NULL DEFAULT 0 COMMENT '是否已解投资(0=否 1=是，不删除记录)',
+    deinvest_tx_hash  VARCHAR(128) DEFAULT NULL COMMENT '解投资交易hash',
+    deinvest_time     BIGINT UNSIGNED DEFAULT NULL COMMENT '解投资时间(微秒)',
+    created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_tx_hash (tx_hash),
     KEY idx_address (address),
-    KEY idx_block_height (block_height)
-) ENGINE=InnoDB COMMENT='投资记录';
+    KEY idx_bonus_addr (bonus_addr),
+    KEY idx_block_height (block_height),
+    KEY idx_is_deinvested (is_deinvested)
+) ENGINE=InnoDB COMMENT='投资记录(解投资以标记形式存在)';
 
 -- 同步进度表
 CREATE TABLE IF NOT EXISTS sync_status (

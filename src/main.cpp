@@ -14,14 +14,18 @@
 #include "parser/block_parser.h"
 #include "parser/business_registry.h"
 #include "parser/parsers/investment_module.h"
+#include "parser/parsers/proposal_module.h"
 #include "parser/parsers/staking_module.h"
+#include "parser/parsers/vote_module.h"
 #include "storage/balance_repo.h"
 #include "storage/block_repo.h"
 #include "storage/db_pool.h"
 #include "storage/investment_repo.h"
+#include "storage/proposal_repo.h"
 #include "storage/staking_repo.h"
 #include "storage/sync_repo.h"
 #include "storage/tx_repo.h"
+#include "storage/vote_repo.h"
 #include "utxo/utxo_store.h"
 
 namespace {
@@ -78,6 +82,8 @@ int main(int argc, char** argv) {
         hubsql::TxRepo tx_repo(db_pool);
         hubsql::StakingRepo staking_repo(db_pool);
         hubsql::InvestmentRepo investment_repo(db_pool);
+        hubsql::ProposalRepo proposal_repo(db_pool);
+        hubsql::VoteRepo vote_repo(db_pool);
         hubsql::SyncRepo sync_repo(db_pool);
         hubsql::BalanceRepo balance_repo(db_pool);
 
@@ -94,6 +100,10 @@ int main(int argc, char** argv) {
             std::make_shared<hubsql::StakingModule>(staking_repo));
         business_registry.Register(
             std::make_shared<hubsql::InvestmentModule>(investment_repo));
+        business_registry.Register(
+            std::make_shared<hubsql::ProposalModule>(proposal_repo));
+        business_registry.Register(
+            std::make_shared<hubsql::VoteModule>(vote_repo, proposal_repo));
 
         // ---- 解析层：UTXO 规则 + 余额落库 + 注册表分发业务解析 ----
         hubsql::BlockParser block_parser(utxo_store, balance_repo,

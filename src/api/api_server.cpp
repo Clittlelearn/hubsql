@@ -100,6 +100,12 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
             f["address"] = GetStr(req, "address");
         if (req.url_params.get("is_unstaked"))
             f["is_unstaked"] = GetInt(req, "is_unstaked", -1);
+        if (req.url_params.get("is_deinvested"))
+            f["is_deinvested"] = GetInt(req, "is_deinvested", -1);
+        if (req.url_params.get("is_revoked"))
+            f["is_revoked"] = GetInt(req, "is_revoked", -1);
+        if (req.url_params.get("proposal_hash"))
+            f["proposal_hash"] = GetStr(req, "proposal_hash");
         return f;
     };
 
@@ -132,6 +138,40 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
             [business_ctrl, build_filter](const crow::request& req) mutable {
                 return JsonRespond(business_ctrl.List(
                     "investment", build_filter(req),
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+    impl_->app.route_dynamic("/api/v1/deinvestments")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl, build_filter](const crow::request& req) mutable {
+                nlohmann::json f = build_filter(req);
+                f["is_deinvested"] = 1;  // 已解投资视图
+                return JsonRespond(business_ctrl.List(
+                    "investment", f,
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+
+    // ---- 提案 / 投票 ----
+    impl_->app.route_dynamic("/api/v1/proposals")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl, build_filter](const crow::request& req) mutable {
+                return JsonRespond(business_ctrl.List(
+                    "proposal", build_filter(req),
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+    impl_->app.route_dynamic("/api/v1/revokedproposals")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl, build_filter](const crow::request& req) mutable {
+                nlohmann::json f = build_filter(req);
+                f["is_revoked"] = 1;  // 已撤销提案视图
+                return JsonRespond(business_ctrl.List(
+                    "proposal", f,
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+    impl_->app.route_dynamic("/api/v1/votes")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl, build_filter](const crow::request& req) mutable {
+                return JsonRespond(business_ctrl.List(
+                    "vote", build_filter(req),
                     GetInt(req, "page", 1), GetInt(req, "size", 20)));
             });
 
