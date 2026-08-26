@@ -16,6 +16,7 @@ deploy/mysql-portable/run/
 # IDE
 .vscode/
 .idea/
+.cache/
 
 # 其他
 hivex-main

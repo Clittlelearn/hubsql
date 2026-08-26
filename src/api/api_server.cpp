@@ -104,8 +104,18 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
             f["is_deinvested"] = GetInt(req, "is_deinvested", -1);
         if (req.url_params.get("is_revoked"))
             f["is_revoked"] = GetInt(req, "is_revoked", -1);
+        if (req.url_params.get("is_unlocked"))
+            f["is_unlocked"] = GetInt(req, "is_unlocked", -1);
         if (req.url_params.get("proposal_hash"))
             f["proposal_hash"] = GetStr(req, "proposal_hash");
+        if (req.url_params.get("type"))
+            f["type"] = GetStr(req, "type");
+        if (req.url_params.get("tx_type"))
+            f["tx_type"] = GetStr(req, "tx_type");
+        if (req.url_params.get("is_flow_in"))
+            f["is_flow_in"] = GetInt(req, "is_flow_in", -1);
+        if (req.url_params.get("is_flow_out"))
+            f["is_flow_out"] = GetInt(req, "is_flow_out", -1);
         return f;
     };
 
@@ -172,6 +182,42 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
             [business_ctrl, build_filter](const crow::request& req) mutable {
                 return JsonRespond(business_ctrl.List(
                     "vote", build_filter(req),
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+
+    // ---- 锁定 / 解锁定 ----
+    impl_->app.route_dynamic("/api/v1/locks")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl, build_filter](const crow::request& req) mutable {
+                return JsonRespond(business_ctrl.List(
+                    "lock", build_filter(req),
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+    impl_->app.route_dynamic("/api/v1/unlockedlocks")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl, build_filter](const crow::request& req) mutable {
+                nlohmann::json f = build_filter(req);
+                f["is_unlocked"] = 1;  // 已解锁定视图
+                return JsonRespond(business_ctrl.List(
+                    "lock", f,
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+
+    // ---- 交易记录（滚动，仅最新 20 个高度）----
+    impl_->app.route_dynamic("/api/v1/txrecords")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl, build_filter](const crow::request& req) mutable {
+                return JsonRespond(business_ctrl.List(
+                    "txrecord", build_filter(req),
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+
+    // ---- 合约交易（含跃入/跃出）----
+    impl_->app.route_dynamic("/api/v1/contracts")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl, build_filter](const crow::request& req) mutable {
+                return JsonRespond(business_ctrl.List(
+                    "contract", build_filter(req),
                     GetInt(req, "page", 1), GetInt(req, "size", 20)));
             });
 

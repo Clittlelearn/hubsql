@@ -32,7 +32,8 @@ struct Utxo {
     std::vector<std::string> owner;
     Vin vin;
     std::vector<Vout> vout;
-    REFLECT(owner, vin, vout)
+    std::string assetType;  // 资产类型（OHI 或合约/提案hash）
+    REFLECT(owner, vin, vout, assetType)
 };
 
 struct Transaction {

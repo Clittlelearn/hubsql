@@ -35,6 +35,12 @@ public:
     virtual int Process(sql::Connection& conn, const Transaction& tx,
                         uint64_t block_height) = 0;
 
+    // 区块内全部交易处理完后回调（默认空实现）；可用于滚动清理等
+    virtual void OnBlockEnd(sql::Connection& conn, uint64_t block_height) {
+        (void)conn;
+        (void)block_height;
+    }
+
     // ---- REST API ----
     // 列表查询；filter 为业务自定义过滤参数（如 {"address":"...", "is_unstaked":1}）
     virtual nlohmann::json List(const nlohmann::json& filter, int page, int size) = 0;

@@ -1,11 +1,14 @@
 #include <gtest/gtest.h>
 
 #include "model/transaction.h"
+#include "parser/parsers/contract_parser.h"
 #include "parser/parsers/deinvest_parser.h"
 #include "parser/parsers/invest_parser.h"
+#include "parser/parsers/lock_parser.h"
 #include "parser/parsers/proposal_parser.h"
 #include "parser/parsers/revoke_parser.h"
 #include "parser/parsers/staking_parser.h"
+#include "parser/parsers/unlock_parser.h"
 #include "parser/parsers/unstaking_parser.h"
 #include "parser/parsers/vote_parser.h"
 
@@ -247,5 +250,123 @@ TEST(ParserTest, VoteParserMissingHash) {
     // 投票缺少 voteHash 则不产出记录
     auto tx = MakeTx(13, "addr_vote");
     VoteParser p;
+    EXPECT_TRUE(p.Parse(tx).empty());
+}
+
+// ---- 锁定 / 解锁定 / 合约 ----
+
+TEST(ParserTest, LockParser) {
+    auto addr = "0x2E08bA82dcF52966dF03Aa0fd830aFAb70d8911d";
+    Transaction tx;
+    tx.hash = "0xlock1";
+    tx.type = 9;
+    tx.time = 1787279543777324ULL;
+    Utxo u;
+    u.owner = {addr};
+    u.assetType = "OHI";
+    tx.utxos = {u};
+    tx.data = R"({"txInfo":{"lockAmount":10000000000,"lockType":"LockNet"}})";
+
+    LockParser p;
+    EXPECT_EQ(p.GetTxType(), "9");
+    auto recs = p.Parse(tx);
+    ASSERT_EQ(recs.size(), 1);
+    EXPECT_EQ(recs[0].tx_hash, "0xlock1");
+    EXPECT_EQ(recs[0].address, addr);
+    EXPECT_EQ(recs[0].asset_type, "OHI");   // 锁定资产类型
+    EXPECT_EQ(recs[0].amount, "10000000000");
+    EXPECT_EQ(recs[0].lock_type, "LockNet");
+    EXPECT_FALSE(recs[0].is_unlocked);
+}
+
+TEST(ParserTest, UnlockParser) {
+    Transaction tx;
+    tx.hash = "0xunlock1";
+    tx.type = 10;
+    tx.time = 1787279543779999ULL;
+    Utxo u;
+    u.owner = {"0x2E08bA82dcF52966dF03Aa0fd830aFAb70d8911d"};
+    tx.utxos = {u};
+    tx.data = "{\"txInfo\":{\"unLockUtxo\":\"0xlock1\"}}";
+
+    UnlockParser p;
+    EXPECT_EQ(p.GetTxType(), "10");
+    auto recs = p.Parse(tx);
+    ASSERT_EQ(recs.size(), 1);
+    EXPECT_EQ(recs[0].tx_hash, "0xunlock1");
+    EXPECT_EQ(recs[0].lock_tx_hash, "0xlock1");
+    EXPECT_EQ(recs[0].time, 1787279543779999ULL);
+}
+
+TEST(ParserTest, ContractParserDeploy) {
+    auto addr = "0x755Ccf704E17570b64E247f0794314e4C8E542CA";
+    Transaction tx;
+    tx.hash = "0xdeploy1";
+    tx.type = 7;
+    tx.time = 12345;
+    Utxo u;
+    u.owner = {addr};
+    u.assetType = "OHI";
+    tx.utxos = {u};
+    tx.data = std::string("{\"txInfo\":{\"sender\":\"") + addr +
+              "\",\"recipient\":\"0xR1\",\"baseFee\":\"10\"}}";
+
+    ContractParser p;
+    auto recs = p.Parse(tx);
+    ASSERT_EQ(recs.size(), 1);
+    EXPECT_EQ(recs[0].tx_type, "deploy");
+    EXPECT_EQ(recs[0].recipient, "0xR1");
+    EXPECT_FALSE(recs[0].is_flow_in);
+    EXPECT_FALSE(recs[0].is_flow_out);
+    EXPECT_EQ(recs[0].asset_type, "OHI");
+}
+
+TEST(ParserTest, ContractParserFlowIn) {
+    auto addr = "0x755Ccf704E17570b64E247f0794314e4C8E542CA";
+    Transaction tx;
+    tx.hash = "0xflowin1";
+    tx.type = 8;
+    tx.time = 12346;
+    Utxo u;
+    u.owner = {addr};
+    u.assetType = "OHI";
+    u.vout = {{Vout{"5000000000000000", addr}}, {Vout{"0", "VirtualBurnGas"}}};
+    tx.utxos = {u};
+    tx.data = "{\"txInfo\":{\"callType\":\"FlowInTx\"}}";
+
+    ContractParser p;
+    auto recs = p.Parse(tx);
+    ASSERT_EQ(recs.size(), 1);
+    EXPECT_EQ(recs[0].tx_type, "call");
+    EXPECT_TRUE(recs[0].is_flow_in);
+    EXPECT_FALSE(recs[0].is_flow_out);
+    EXPECT_EQ(recs[0].flow_in_amount, "5000000000000000");  // 跃入金额=真实vout之和
+}
+
+TEST(ParserTest, ContractParserFlowOut) {
+    auto addr = "0x755Ccf704E17570b64E247f0794314e4C8E542CA";
+    Transaction tx;
+    tx.hash = "0xflowout1";
+    tx.type = 8;
+    tx.time = 12347;
+    Utxo u;
+    u.owner = {addr};
+    u.assetType = "OHI";
+    u.vout = {{Vout{"100000000", "VirtualCallFlowOutBurnGas"}},
+              {Vout{"9900000000", addr}}};
+    tx.utxos = {u};
+    tx.data = "{\"txInfo\":{\"callType\":\"FlowOutTx\"}}";
+
+    ContractParser p;
+    auto recs = p.Parse(tx);
+    ASSERT_EQ(recs.size(), 1);
+    EXPECT_TRUE(recs[0].is_flow_out);
+    EXPECT_FALSE(recs[0].is_flow_in);
+    EXPECT_EQ(recs[0].flow_out_amount, "100000000");  // 跃出金额=FlowOutBurnGas vout
+}
+
+TEST(ParserTest, ContractParserUnknownType) {
+    auto tx = MakeTx(1, "addr");  // type 1 非合约
+    ContractParser p;
     EXPECT_TRUE(p.Parse(tx).empty());
 }

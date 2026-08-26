@@ -126,6 +126,10 @@ REST API 自动获得通用路由 `/api/v1/business/{name}`，并可加别名路
 | GET | `/api/v1/proposals?address=&is_revoked=&page=&size=` | 提案记录（txInfo/投票数/是否第一笔/撤销标记） |
 | GET | `/api/v1/revokedproposals?address=&page=&size=` | 已撤销提案视图（`is_revoked=1`） |
 | GET | `/api/v1/votes?address=&proposal_hash=&page=&size=` | 投票记录（被投票提案/类型/投票类型/票数） |
+| GET | `/api/v1/locks?address=&is_unlocked=&page=&size=` | 锁定记录（资产类型/金额/类型/解锁定标记） |
+| GET | `/api/v1/unlockedlocks?address=&page=&size=` | 已解锁定视图（`is_unlocked=1`） |
+| GET | `/api/v1/txrecords?type=&page=&size=` | 交易记录（仅保留最新 20 个高度） |
+| GET | `/api/v1/contracts?tx_type=&is_flow_in=&is_flow_out=&page=&size=` | 合约交易（部署/调用，含跃入跃出） |
 | GET | `/api/v1/stats/overview` | 全局统计 |
 
 统一响应结构：`{"code": 0, "message": "ok", "data": {...}}`

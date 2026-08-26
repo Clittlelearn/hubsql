@@ -61,6 +61,7 @@ Block Block::FromJson(const nlohmann::json& j) {
             for (const auto& o : u.value("owner", nlohmann::json::array())) {
                 ut.owner.push_back(o.get<std::string>());
             }
+            ut.assetType = u.value("assetType", "");
             // vin.prevout 为 [{hash, n}]（可能是单个对象或数组 -> 统一解析）
             const auto& vinj = u.value("vin", nlohmann::json::object());
             const auto& pj   = vinj.value("prevout", nlohmann::json::array());

@@ -13,17 +13,23 @@
 #include "fetcher/sync_scheduler.h"
 #include "parser/block_parser.h"
 #include "parser/business_registry.h"
+#include "parser/parsers/contract_module.h"
 #include "parser/parsers/investment_module.h"
+#include "parser/parsers/lock_module.h"
 #include "parser/parsers/proposal_module.h"
 #include "parser/parsers/staking_module.h"
+#include "parser/parsers/tx_record_module.h"
 #include "parser/parsers/vote_module.h"
 #include "storage/balance_repo.h"
 #include "storage/block_repo.h"
+#include "storage/contract_repo.h"
 #include "storage/db_pool.h"
 #include "storage/investment_repo.h"
+#include "storage/lock_repo.h"
 #include "storage/proposal_repo.h"
 #include "storage/staking_repo.h"
 #include "storage/sync_repo.h"
+#include "storage/tx_record_repo.h"
 #include "storage/tx_repo.h"
 #include "storage/vote_repo.h"
 #include "utxo/utxo_store.h"
@@ -84,6 +90,9 @@ int main(int argc, char** argv) {
         hubsql::InvestmentRepo investment_repo(db_pool);
         hubsql::ProposalRepo proposal_repo(db_pool);
         hubsql::VoteRepo vote_repo(db_pool);
+        hubsql::LockRepo lock_repo(db_pool);
+        hubsql::TxRecordRepo tx_record_repo(db_pool);
+        hubsql::ContractRepo contract_repo(db_pool);
         hubsql::SyncRepo sync_repo(db_pool);
         hubsql::BalanceRepo balance_repo(db_pool);
 
@@ -104,6 +113,12 @@ int main(int argc, char** argv) {
             std::make_shared<hubsql::ProposalModule>(proposal_repo));
         business_registry.Register(
             std::make_shared<hubsql::VoteModule>(vote_repo, proposal_repo));
+        business_registry.Register(
+            std::make_shared<hubsql::LockModule>(lock_repo));
+        business_registry.Register(
+            std::make_shared<hubsql::TxRecordModule>(tx_record_repo, 20));
+        business_registry.Register(
+            std::make_shared<hubsql::ContractModule>(contract_repo));
 
         // ---- 解析层：UTXO 规则 + 余额落库 + 注册表分发业务解析 ----
         hubsql::BlockParser block_parser(utxo_store, balance_repo,

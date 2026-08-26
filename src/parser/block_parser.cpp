@@ -28,6 +28,10 @@ void BlockParser::ParseAndStore(const Block& block) {
             for (const auto& tx : block.txs) {
                 biz += registry_.ProcessTransaction(conn, tx, block.blocks.height);
             }
+            // 每块结束后回调所有模块（如交易记录滚动清理）
+            for (auto* m : registry_.All()) {
+                m->OnBlockEnd(conn, block.blocks.height);
+            }
             conn.commit();
         } catch (...) {
             conn.rollback();
