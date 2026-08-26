@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "model/transaction.h"
+#include "parser/parsers/claim_parser.h"
 #include "parser/parsers/contract_parser.h"
 #include "parser/parsers/deinvest_parser.h"
 #include "parser/parsers/invest_parser.h"
@@ -368,5 +369,37 @@ TEST(ParserTest, ContractParserFlowOut) {
 TEST(ParserTest, ContractParserUnknownType) {
     auto tx = MakeTx(1, "addr");  // type 1 非合约
     ContractParser p;
+    EXPECT_TRUE(p.Parse(tx).empty());
+}
+
+// ---- 申领 ----
+
+TEST(ParserTest, ClaimParser) {
+    auto addr = "0x03bEE3dB52E736B6422DaC4668CC784d05cb2e63";
+    Transaction tx;
+    tx.hash = "0xclaim1";
+    tx.type = 99;
+    tx.time = 1787384124650457ULL;
+    Utxo u;
+    u.owner = {addr};
+    u.assetType = "OHI";
+    tx.utxos = {u};
+    tx.data = R"({"txInfo":{"bonusAddrList":3,"bonusAmount":65143162138}})";
+
+    ClaimParser p;
+    EXPECT_EQ(p.GetTxType(), "99");
+    auto recs = p.Parse(tx);
+    ASSERT_EQ(recs.size(), 1);
+    EXPECT_EQ(recs[0].tx_hash, "0xclaim1");
+    EXPECT_EQ(recs[0].address, addr);
+    EXPECT_EQ(recs[0].asset_type, "OHI");   // 申领资产类型
+    EXPECT_EQ(recs[0].amount, "65143162138");  // 申领金额
+    EXPECT_EQ(recs[0].time, 1787384124650457ULL);
+}
+
+TEST(ParserTest, ClaimParserMissingData) {
+    // 无 data.txInfo 的交易不被识别为申领
+    auto tx = MakeTx(99, "addr_claim");
+    ClaimParser p;
     EXPECT_TRUE(p.Parse(tx).empty());
 }

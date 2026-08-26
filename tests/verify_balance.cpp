@@ -10,6 +10,7 @@
 #include "fetcher/http_client.h"
 #include "parser/block_parser.h"
 #include "parser/business_registry.h"
+#include "parser/parsers/claim_module.h"
 #include "parser/parsers/contract_module.h"
 #include "parser/parsers/investment_module.h"
 #include "parser/parsers/lock_module.h"
@@ -18,6 +19,7 @@
 #include "parser/parsers/tx_record_module.h"
 #include "parser/parsers/vote_module.h"
 #include "storage/balance_repo.h"
+#include "storage/claim_repo.h"
 #include "storage/contract_repo.h"
 #include "storage/db_pool.h"
 #include "storage/investment_repo.h"
@@ -46,6 +48,7 @@ int main(int argc, char** argv) {
         hubsql::LockRepo lock_repo(db_pool);
         hubsql::TxRecordRepo tx_record_repo(db_pool);
         hubsql::ContractRepo contract_repo(db_pool);
+        hubsql::ClaimRepo claim_repo(db_pool);
         hubsql::UtxoStore store(cfg.utxo_db_path);
 
         hubsql::BusinessRegistry registry;
@@ -56,6 +59,7 @@ int main(int argc, char** argv) {
         registry.Register(std::make_shared<hubsql::LockModule>(lock_repo));
         registry.Register(std::make_shared<hubsql::TxRecordModule>(tx_record_repo, 20));
         registry.Register(std::make_shared<hubsql::ContractModule>(contract_repo));
+        registry.Register(std::make_shared<hubsql::ClaimModule>(claim_repo));
         hubsql::BlockParser parser(store, balance_repo, registry, db_pool);
 
         auto http = std::make_shared<hubsql::HttpClient>(cfg.chain.http);

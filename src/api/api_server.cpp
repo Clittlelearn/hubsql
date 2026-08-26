@@ -112,6 +112,8 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
             f["type"] = GetStr(req, "type");
         if (req.url_params.get("tx_type"))
             f["tx_type"] = GetStr(req, "tx_type");
+        if (req.url_params.get("asset_type"))
+            f["asset_type"] = GetStr(req, "asset_type");
         if (req.url_params.get("is_flow_in"))
             f["is_flow_in"] = GetInt(req, "is_flow_in", -1);
         if (req.url_params.get("is_flow_out"))
@@ -218,6 +220,15 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
             [business_ctrl, build_filter](const crow::request& req) mutable {
                 return JsonRespond(business_ctrl.List(
                     "contract", build_filter(req),
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+
+    // ---- 申领 ----
+    impl_->app.route_dynamic("/api/v1/claims")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl, build_filter](const crow::request& req) mutable {
+                return JsonRespond(business_ctrl.List(
+                    "claim", build_filter(req),
                     GetInt(req, "page", 1), GetInt(req, "size", 20)));
             });
 

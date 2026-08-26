@@ -112,6 +112,9 @@ REST API 自动获得通用路由 `/api/v1/business/{name}`，并可加别名路
 
 ## REST API
 
+详细接口说明与数据格式示例见 **[docs/API文档.md](docs/API文档.md)**（含各业务字段、分页、时间戳/金额格式约定）。
+
+服务默认端口 `8080`：
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/health` | 健康检查 |
@@ -130,6 +133,7 @@ REST API 自动获得通用路由 `/api/v1/business/{name}`，并可加别名路
 | GET | `/api/v1/unlockedlocks?address=&page=&size=` | 已解锁定视图（`is_unlocked=1`） |
 | GET | `/api/v1/txrecords?type=&page=&size=` | 交易记录（仅保留最新 20 个高度） |
 | GET | `/api/v1/contracts?tx_type=&is_flow_in=&is_flow_out=&page=&size=` | 合约交易（部署/调用，含跃入跃出） |
+| GET | `/api/v1/claims?address=&asset_type=&page=&size=` | 申领记录（BONUS，金额/资产类型） |
 | GET | `/api/v1/stats/overview` | 全局统计 |
 
 统一响应结构：`{"code": 0, "message": "ok", "data": {...}}`

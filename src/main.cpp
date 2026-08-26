@@ -13,6 +13,7 @@
 #include "fetcher/sync_scheduler.h"
 #include "parser/block_parser.h"
 #include "parser/business_registry.h"
+#include "parser/parsers/claim_module.h"
 #include "parser/parsers/contract_module.h"
 #include "parser/parsers/investment_module.h"
 #include "parser/parsers/lock_module.h"
@@ -22,6 +23,7 @@
 #include "parser/parsers/vote_module.h"
 #include "storage/balance_repo.h"
 #include "storage/block_repo.h"
+#include "storage/claim_repo.h"
 #include "storage/contract_repo.h"
 #include "storage/db_pool.h"
 #include "storage/investment_repo.h"
@@ -93,6 +95,7 @@ int main(int argc, char** argv) {
         hubsql::LockRepo lock_repo(db_pool);
         hubsql::TxRecordRepo tx_record_repo(db_pool);
         hubsql::ContractRepo contract_repo(db_pool);
+        hubsql::ClaimRepo claim_repo(db_pool);
         hubsql::SyncRepo sync_repo(db_pool);
         hubsql::BalanceRepo balance_repo(db_pool);
 
@@ -119,6 +122,8 @@ int main(int argc, char** argv) {
             std::make_shared<hubsql::TxRecordModule>(tx_record_repo, 20));
         business_registry.Register(
             std::make_shared<hubsql::ContractModule>(contract_repo));
+        business_registry.Register(
+            std::make_shared<hubsql::ClaimModule>(claim_repo));
 
         // ---- 解析层：UTXO 规则 + 余额落库 + 注册表分发业务解析 ----
         hubsql::BlockParser block_parser(utxo_store, balance_repo,
