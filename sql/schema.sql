@@ -71,6 +71,118 @@ CREATE TABLE IF NOT EXISTS investment_records (
     KEY idx_is_deinvested (is_deinvested)
 ) ENGINE=InnoDB COMMENT='投资记录(解投资以标记形式存在)';
 
+-- 提案业务表（撤销提案仅标记，不删除记录）
+CREATE TABLE IF NOT EXISTS proposals (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tx_hash VARCHAR(128) NOT NULL COMMENT '提案hash',
+    asset VARCHAR(128) NOT NULL DEFAULT '' COMMENT '资产名(OHI 或提案hash)，用于投票/撤销关联',
+    block_height BIGINT UNSIGNED NOT NULL COMMENT '提案所在区块高度',
+    address VARCHAR(128) NOT NULL DEFAULT '' COMMENT '提案人地址',
+    tx_info JSON DEFAULT NULL COMMENT '提案交易 txInfo',
+    vote_count BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '提案投票数量',
+    is_first TINYINT NOT NULL DEFAULT 0 COMMENT '是否第一笔提案(OHI提案)',
+    is_revoked TINYINT NOT NULL DEFAULT 0 COMMENT '是否已撤销(0=否 1=是，不删除记录)',
+    revoke_tx_hash VARCHAR(128) DEFAULT NULL COMMENT '撤销提案交易hash',
+    revoke_time BIGINT UNSIGNED DEFAULT NULL COMMENT '撤销时间(微秒)',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_tx_hash (tx_hash), UNIQUE KEY uk_asset (asset),
+    KEY idx_address (address), KEY idx_is_revoked (is_revoked), KEY idx_vote_count (vote_count)
+) ENGINE=InnoDB COMMENT='提案记录(撤销以标记形式存在)';
+
+-- 投票业务表
+CREATE TABLE IF NOT EXISTS votes (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tx_hash VARCHAR(128) NOT NULL COMMENT '投票交易hash',
+    block_height BIGINT UNSIGNED NOT NULL COMMENT '投票所在区块高度',
+    address VARCHAR(128) NOT NULL DEFAULT '' COMMENT '投票人地址',
+    proposal_hash VARCHAR(128) NOT NULL DEFAULT '' COMMENT '被投票的提案hash(第一笔提案为OHI)',
+    proposal_type BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '被投票交易类型(voteTxType)',
+    vote_type BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '投票类型(0=反对 1=赞成)',
+    vote_number BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '票数',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_tx_hash (tx_hash), KEY idx_proposal_hash (proposal_hash),
+    KEY idx_address (address), KEY idx_block_height (block_height)
+) ENGINE=InnoDB COMMENT='投票记录';
+
+-- 锁定业务表（解锁定仅标记，不删除记录）
+CREATE TABLE IF NOT EXISTS lock_records (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tx_hash VARCHAR(128) NOT NULL COMMENT '锁定交易hash',
+    block_height BIGINT UNSIGNED NOT NULL COMMENT '锁定所在区块高度',
+    address VARCHAR(128) NOT NULL DEFAULT '' COMMENT '锁定地址',
+    asset_type VARCHAR(128) NOT NULL DEFAULT '' COMMENT '锁定资产类型(hash或OHI)',
+    lock_amount DECIMAL(36,18) NOT NULL DEFAULT 0 COMMENT '锁定金额',
+    lock_time BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '锁定时间(微秒)',
+    lock_type VARCHAR(32) NOT NULL DEFAULT '' COMMENT '锁定类型(如 LockNet)',
+    is_unlocked TINYINT NOT NULL DEFAULT 0 COMMENT '是否已解锁定(0=否 1=是，不删除记录)',
+    unlock_tx_hash VARCHAR(128) DEFAULT NULL COMMENT '解锁定交易hash',
+    unlock_time BIGINT UNSIGNED DEFAULT NULL COMMENT '解锁定时间(微秒)',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_tx_hash (tx_hash), KEY idx_address (address),
+    KEY idx_asset_type (asset_type), KEY idx_is_unlocked (is_unlocked)
+) ENGINE=InnoDB COMMENT='锁定记录(解锁定以标记形式存在)';
+
+-- 交易记录表（滚动：仅保留最新 20 个高度）
+CREATE TABLE IF NOT EXISTS tx_records (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tx_hash VARCHAR(128) NOT NULL COMMENT '交易hash',
+    block_height BIGINT UNSIGNED NOT NULL COMMENT '交易所在区块高度',
+    tx_type VARCHAR(32) NOT NULL DEFAULT '' COMMENT '交易类型',
+    utxo_json JSON DEFAULT NULL COMMENT '交易 utxo (json)',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_tx_hash (tx_hash), KEY idx_block_height (block_height), KEY idx_tx_type (tx_type)
+) ENGINE=InnoDB COMMENT='交易记录(仅保留最新20个高度)';
+
+-- 合约交易表（DEPLOY=7 / CALL=8，含跃入/跃出）
+CREATE TABLE IF NOT EXISTS contract_records (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tx_hash VARCHAR(128) NOT NULL COMMENT '交易hash',
+    block_height BIGINT UNSIGNED NOT NULL COMMENT '交易所在区块高度',
+    address VARCHAR(128) NOT NULL DEFAULT '' COMMENT '账户地址(sender)',
+    sender VARCHAR(128) NOT NULL DEFAULT '' COMMENT '发送者',
+    recipient VARCHAR(128) NOT NULL DEFAULT '' COMMENT '合约地址(recipient)',
+    tx_type VARCHAR(16) NOT NULL DEFAULT '' COMMENT 'deploy/call',
+    is_flow_in TINYINT NOT NULL DEFAULT 0 COMMENT '是否合约跃入',
+    is_flow_out TINYINT NOT NULL DEFAULT 0 COMMENT '是否合约跃出',
+    flow_in_amount DECIMAL(36,18) NOT NULL DEFAULT 0 COMMENT '跃入金额',
+    flow_out_amount DECIMAL(36,18) NOT NULL DEFAULT 0 COMMENT '跃出金额',
+    asset_type VARCHAR(128) NOT NULL DEFAULT '' COMMENT '跃入跃出资产类型(hash或OHI)',
+    tx_info JSON DEFAULT NULL COMMENT 'txInfo (json)',
+    tx_time BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '交易时间(微秒)',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_tx_hash (tx_hash), KEY idx_tx_type (tx_type), KEY idx_recipient (recipient),
+    KEY idx_is_flow_in (is_flow_in), KEY idx_is_flow_out (is_flow_out), KEY idx_block_height (block_height)
+) ENGINE=InnoDB COMMENT='合约交易记录(含跃入跃出)';
+
+-- BONUS(type99) 申领业务表
+CREATE TABLE IF NOT EXISTS claim_records (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tx_hash VARCHAR(128) NOT NULL COMMENT '申领交易hash',
+    block_height BIGINT UNSIGNED NOT NULL COMMENT '申领所在区块高度',
+    address VARCHAR(128) NOT NULL DEFAULT '' COMMENT '申领地址',
+    asset_type VARCHAR(128) NOT NULL DEFAULT '' COMMENT '申领资产类型(hash或OHI)',
+    claim_amount DECIMAL(36,18) NOT NULL DEFAULT 0 COMMENT '申领金额',
+    claim_time BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '申领时间(微秒)',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_tx_hash (tx_hash), KEY idx_address (address), KEY idx_asset_type (asset_type)
+) ENGINE=InnoDB COMMENT='申领记录';
+
+-- FUND：ERC20 transfer(address,uint256) 资金发放记录（链上 type=8 合约调用）
+CREATE TABLE IF NOT EXISTS fund_records (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tx_hash VARCHAR(128) NOT NULL COMMENT 'fund交易hash',
+    block_height BIGINT UNSIGNED NOT NULL COMMENT '所在区块高度',
+    sender VARCHAR(128) NOT NULL DEFAULT '' COMMENT '资金发送地址',
+    recipient VARCHAR(128) NOT NULL DEFAULT '' COMMENT '资金接收地址',
+    contract_address VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'ERC20合约地址',
+    fund_amount VARCHAR(78) NOT NULL DEFAULT '0' COMMENT 'ERC20最小单位金额(uint256，十进制字符串)',
+    fund_time BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '交易时间(微秒)',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_tx_hash (tx_hash),
+    KEY idx_sender (sender), KEY idx_recipient (recipient),
+    KEY idx_contract_address (contract_address), KEY idx_block_height (block_height)
+) ENGINE=InnoDB COMMENT='ERC20资金发放记录';
+
 -- 同步进度表
 CREATE TABLE IF NOT EXISTS sync_status (
     id                 INT PRIMARY KEY AUTO_INCREMENT,

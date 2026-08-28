@@ -7,6 +7,7 @@
 #include <boost/multiprecision/cpp_int.hpp>
 #include <algorithm>
 #include <cctype>
+#include <optional>
 
 namespace hubsql {
 
@@ -28,6 +29,44 @@ std::string HexToDec(const std::string& hex) {
         if (v >= 0) n = n * 16 + v;
     }
     return n.convert_to<std::string>();
+}
+
+struct Erc20CallTransfer {
+    std::string contract;
+    std::string from;
+    std::string to;
+    std::string amount;
+};
+
+std::optional<Erc20CallTransfer> ParseErc20CallTransfer(
+    const Transaction& tx, const nlohmann::json& info) {
+    if (tx.type != 8) return std::nullopt;
+
+    std::string input = Lower(info.value("input", ""));
+    if (input.rfind("0x", 0) == 0) input.erase(0, 2);
+    const std::string contract = Lower(info.value("recipient", ""));
+    if (contract.empty()) return std::nullopt;
+
+    Erc20CallTransfer transfer;
+    transfer.contract = contract;
+    if (input.size() >= 8 + 64 + 64 && input.substr(0, 8) == "a9059cbb") {
+        // transfer(address to, uint256 amount)
+        transfer.from = Lower(info.value("sender", tx.identity));
+        transfer.to = "0x" + input.substr(8 + 24, 40);
+        transfer.amount = HexToDec(input.substr(8 + 64, 64));
+    } else if (input.size() >= 8 + 64 * 3 && input.substr(0, 8) == "23b872dd") {
+        // transferFrom(address from, address to, uint256 amount)
+        transfer.from = "0x" + input.substr(8 + 24, 40);
+        transfer.to = "0x" + input.substr(8 + 64 + 24, 40);
+        transfer.amount = HexToDec(input.substr(8 + 64 * 2, 64));
+    } else {
+        return std::nullopt;
+    }
+
+    if (transfer.from.empty() || transfer.to.empty() || transfer.amount.empty()) {
+        return std::nullopt;
+    }
+    return transfer;
 }
 }  // namespace
 
@@ -129,30 +168,23 @@ int64_t BalanceRepo::TotalBalance(const std::string& asset_type) {
 void BalanceRepo::ApplyErc20Transfers(sql::Connection& conn, const Transaction& tx,
                                       const nlohmann::json& execution_result) {
     if (tx.type != 7 && tx.type != 8) return;
-    if (!execution_result.is_object()) return;
     nlohmann::json info;
     try { info = nlohmann::json::parse(tx.data).value("txInfo", nlohmann::json::object()); }
     catch (...) { return; }
-    const auto logs = execution_result.value("log", nlohmann::json::array());
-    static const std::string transfer_topic = "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
     const std::string zero = "0x0000000000000000000000000000000000000000";
-    uint32_t log_index = 0;
-    for (const auto& log : logs) {
-        const uint32_t current_index = log_index++;
-        auto topics = log.value("topics", nlohmann::json::array());
-        if (topics.size() < 3 || Lower(topics[0].get<std::string>()) != transfer_topic) continue;
-        std::string contract = TopicAddress(log.value("creator", ""));
-        std::string from = TopicAddress(topics[1].get<std::string>());
-        std::string to = TopicAddress(topics[2].get<std::string>());
-        std::string amount = HexToDec(log.value("data", "0"));
+    auto apply_transfer = [&](const std::string& contract,
+                              const std::string& from,
+                              const std::string& to,
+                              const std::string& amount,
+                              uint32_t event_index) {
         std::unique_ptr<sql::PreparedStatement> c(conn.prepareStatement(
             "INSERT IGNORE INTO erc20_contracts(contract_address,deploy_tx_hash,deployer_address) VALUES(?,?,?)"));
         c->setString(1, contract); c->setString(2, tx.type == 7 ? tx.hash : "");
         c->setString(3, info.value("sender", "")); c->executeUpdate();
         std::unique_ptr<sql::PreparedStatement> event(conn.prepareStatement(
             "INSERT IGNORE INTO erc20_transfer_events(tx_hash,log_index,contract_address) VALUES(?,?,?)"));
-        event->setString(1, tx.hash); event->setUInt(2, current_index); event->setString(3, contract);
-        if (event->executeUpdate() == 0) continue;  // 区块重放/重启时不重复计算
+        event->setString(1, tx.hash); event->setUInt(2, event_index); event->setString(3, contract);
+        if (event->executeUpdate() == 0) return;  // 区块重放/重启时不重复计算
         auto apply = [&](const std::string& account, bool add) {
             if (account.empty() || account == zero) return;
             std::unique_ptr<sql::PreparedStatement> q(conn.prepareStatement(
@@ -167,6 +199,31 @@ void BalanceRepo::ApplyErc20Transfers(sql::Connection& conn, const Transaction& 
             u->setString(1, contract); u->setString(2, account); u->setString(3, value.convert_to<std::string>()); u->executeUpdate();
         };
         apply(from, false); apply(to, true);
+    };
+
+    // 对标准 ERC20 transfer/transferFrom，calldata 是金额与账户的主来源。
+    // 即使节点没有返回 blocks.data[txHash].log，也能正确入账。
+    if (auto transfer = ParseErc20CallTransfer(tx, info)) {
+        apply_transfer(transfer->contract, transfer->from, transfer->to,
+                       transfer->amount, 0);
+        return;
+    }
+
+    // 非直接调用（例如合约内部触发的 mint/burn/transfer）无法从外层参数
+    // 确定资产变化，保留 EVM Transfer log 作为兼容回退。
+    if (!execution_result.is_object()) return;
+    const auto logs = execution_result.value("log", nlohmann::json::array());
+    static const std::string transfer_topic = "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+    uint32_t log_index = 0;
+    for (const auto& log : logs) {
+        const uint32_t current_index = log_index++;
+        auto topics = log.value("topics", nlohmann::json::array());
+        if (topics.size() < 3 || Lower(topics[0].get<std::string>()) != transfer_topic) continue;
+        const std::string contract = TopicAddress(log.value("creator", ""));
+        const std::string from = TopicAddress(topics[1].get<std::string>());
+        const std::string to = TopicAddress(topics[2].get<std::string>());
+        const std::string amount = HexToDec(log.value("data", "0"));
+        apply_transfer(contract, from, to, amount, current_index);
     }
 }
 
@@ -180,6 +237,16 @@ bool BalanceRepo::AssociateErc20(const std::string& account, const std::string& 
     });
 }
 
+bool BalanceRepo::RemoveErc20(const std::string& account, const std::string& contract) {
+    return pool_.WithConnection([&](sql::Connection& conn) {
+        std::unique_ptr<sql::PreparedStatement> p(conn.prepareStatement(
+            "DELETE FROM account_erc20_contracts WHERE account_address=? AND contract_address=?"));
+        p->setString(1, Lower(account));
+        p->setString(2, Lower(contract));
+        return p->executeUpdate() > 0;
+    });
+}
+
 std::vector<Erc20BalanceItem> BalanceRepo::ListErc20(const std::string& account) {
     return pool_.WithConnection([&](sql::Connection& conn) {
         std::vector<Erc20BalanceItem> out;
@@ -187,6 +254,50 @@ std::vector<Erc20BalanceItem> BalanceRepo::ListErc20(const std::string& account)
             "SELECT a.contract_address,COALESCE(b.balance,'0') balance FROM account_erc20_contracts a LEFT JOIN erc20_balances b ON b.contract_address=a.contract_address AND b.account_address=a.account_address WHERE a.account_address=? ORDER BY a.created_at"));
         p->setString(1, Lower(account)); std::unique_ptr<sql::ResultSet> rs(p->executeQuery());
         while (rs->next()) out.push_back({ToStd(rs->getString(1)), ToStd(rs->getString(2))});
+        return out;
+    });
+}
+
+std::vector<AssetCatalogItem> BalanceRepo::ListAssetCatalog(const std::string& account) {
+    return pool_.WithConnection([&](sql::Connection& conn) {
+        std::vector<AssetCatalogItem> out;
+        std::unique_ptr<sql::PreparedStatement> proposals(conn.prepareStatement(
+            "SELECT asset,COALESCE(JSON_UNQUOTE(JSON_EXTRACT(tx_info,'$.name')),''),"
+            "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(tx_info,'$.tokenContractAddr')),''),"
+            "COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(tx_info,'$.tokenDecimals')) AS UNSIGNED),8),"
+            "EXISTS(SELECT 1 FROM proposal_asset_balances b WHERE b.address=? AND b.asset_type=proposals.asset) "
+            "FROM proposals ORDER BY is_first DESC,id"));
+        proposals->setString(1, account);
+        std::unique_ptr<sql::ResultSet> pr(proposals->executeQuery());
+        while (pr->next()) {
+            AssetCatalogItem item;
+            item.kind = "proposal";
+            item.asset_type = ToStd(pr->getString(1));
+            item.asset_id = item.asset_type;
+            item.name = ToStd(pr->getString(2));
+            item.symbol = item.asset_type == "OHI" ? "OHI" : item.name;
+            item.contract_address = Lower(ToStd(pr->getString(3)));
+            item.decimals = pr->getInt(4);
+            item.is_added = pr->getBoolean(5) || item.asset_type == "OHI";
+            out.push_back(std::move(item));
+        }
+        std::unique_ptr<sql::PreparedStatement> contracts(conn.prepareStatement(
+            "SELECT c.contract_address,EXISTS(SELECT 1 FROM account_erc20_contracts a "
+            "WHERE a.account_address=? AND a.contract_address=c.contract_address) "
+            "FROM erc20_contracts c ORDER BY c.created_at,c.contract_address"));
+        contracts->setString(1, Lower(account));
+        std::unique_ptr<sql::ResultSet> cr(contracts->executeQuery());
+        while (cr->next()) {
+            AssetCatalogItem item;
+            item.kind = "erc20";
+            item.contract_address = Lower(ToStd(cr->getString(1)));
+            item.asset_id = item.contract_address;
+            item.name = "ERC20 " + item.contract_address.substr(0, 8);
+            item.symbol = "TOKEN";
+            item.decimals = 18;
+            item.is_added = cr->getBoolean(2);
+            out.push_back(std::move(item));
+        }
         return out;
     });
 }

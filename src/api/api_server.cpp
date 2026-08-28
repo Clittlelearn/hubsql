@@ -5,6 +5,7 @@
 #include <string>
 
 #include <crow.h>
+#include <crow/middlewares/cors.h>
 
 #include "api/controllers/balance_controller.h"
 #include "api/controllers/block_controller.h"
@@ -38,6 +39,17 @@ std::string GetStr(const crow::request& req, const char* key,
 crow::response JsonRespond(const nlohmann::json& body) {
     crow::response r(200, body.dump());
     r.add_header("Content-Type", "application/json");
+    r.add_header("Access-Control-Allow-Origin", "*");
+    r.add_header("Access-Control-Allow-Headers", "Content-Type");
+    r.add_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    return r;
+}
+
+crow::response CorsPreflight() {
+    crow::response r(204);
+    r.add_header("Access-Control-Allow-Origin", "*");
+    r.add_header("Access-Control-Allow-Headers", "Content-Type");
+    r.add_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     return r;
 }
 
@@ -45,7 +57,7 @@ crow::response JsonRespond(const nlohmann::json& body) {
 
 struct ApiServer::Impl {
     ApiConfig cfg;
-    crow::SimpleApp app;
+    crow::App<crow::CORSHandler> app;
 };
 
 ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
@@ -53,6 +65,12 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
                      BalanceRepo& balances)
     : impl_(std::make_unique<Impl>()) {
     impl_->cfg = cfg;
+    impl_->app.get_middleware<crow::CORSHandler>()
+        .global()
+        .origin("*")
+        .headers("Content-Type")
+        .methods(crow::HTTPMethod::GET, crow::HTTPMethod::POST,
+                 crow::HTTPMethod::DELETE, crow::HTTPMethod::OPTIONS);
     BlockController block_ctrl(blocks);
     TxController tx_ctrl(txs);
     BusinessController business_ctrl(registry, blocks, txs);
@@ -114,6 +132,8 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
             f["tx_type"] = GetStr(req, "tx_type");
         if (req.url_params.get("asset_type"))
             f["asset_type"] = GetStr(req, "asset_type");
+        if (req.url_params.get("contract_address"))
+            f["contract_address"] = GetStr(req, "contract_address");
         if (req.url_params.get("is_flow_in"))
             f["is_flow_in"] = GetInt(req, "is_flow_in", -1);
         if (req.url_params.get("is_flow_out"))
@@ -232,6 +252,15 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
                     GetInt(req, "page", 1), GetInt(req, "size", 20)));
             });
 
+    // ---- ERC20 资金发放（transfer）----
+    impl_->app.route_dynamic("/api/v1/funds")
+        .methods(crow::HTTPMethod::GET)(
+            [business_ctrl, build_filter](const crow::request& req) mutable {
+                return JsonRespond(business_ctrl.List(
+                    "fund", build_filter(req),
+                    GetInt(req, "page", 1), GetInt(req, "size", 20)));
+            });
+
     // ---- 统计（聚合所有已注册业务模块）----
     impl_->app.route_dynamic("/api/v1/stats/overview")
         .methods(crow::HTTPMethod::GET)(
@@ -256,8 +285,9 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
 
     // 用户显式关联后，才在账户 ERC20 余额列表中展示该合约。
     impl_->app.route_dynamic("/api/v1/accounts/<string>/erc20-contracts")
-        .methods(crow::HTTPMethod::POST)(
+        .methods(crow::HTTPMethod::POST, crow::HTTPMethod::OPTIONS)(
             [balance_ctrl](const crow::request& req, std::string address) mutable {
+                if (req.method == crow::HTTPMethod::OPTIONS) return CorsPreflight();
                 try {
                     auto body = nlohmann::json::parse(req.body);
                     return JsonRespond(balance_ctrl.AssociateErc20(
@@ -268,6 +298,18 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
         .methods(crow::HTTPMethod::GET)(
             [balance_ctrl](const crow::request&, std::string address) mutable {
                 return JsonRespond(balance_ctrl.ListErc20(address));
+            });
+    impl_->app.route_dynamic("/api/v1/accounts/<string>/erc20-contracts/<string>")
+        .methods(crow::HTTPMethod::DELETE, crow::HTTPMethod::OPTIONS)(
+            [balance_ctrl](const crow::request& req, std::string address,
+                           std::string contract) mutable {
+                if (req.method == crow::HTTPMethod::OPTIONS) return CorsPreflight();
+                return JsonRespond(balance_ctrl.RemoveErc20(address, contract));
+            });
+    impl_->app.route_dynamic("/api/v1/assets/catalog")
+        .methods(crow::HTTPMethod::GET)(
+            [balance_ctrl](const crow::request& req) mutable {
+                return JsonRespond(balance_ctrl.AssetCatalog(GetStr(req, "address")));
             });
 
     impl_->app.port(cfg.port).bindaddr(cfg.host).multithreaded();

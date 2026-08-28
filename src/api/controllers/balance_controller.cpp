@@ -54,6 +54,28 @@ nlohmann::json BalanceController::ListErc20(const std::string& address) {
     } catch (const std::exception& e) { return Err(500, e.what()); }
 }
 
+nlohmann::json BalanceController::RemoveErc20(
+    const std::string& address, const std::string& contract_address) {
+    try {
+        return Ok({{"removed", repo_.RemoveErc20(address, contract_address)},
+                   {"address", address}, {"contract_address", contract_address}});
+    } catch (const std::exception& e) { return Err(500, e.what()); }
+}
+
+nlohmann::json BalanceController::AssetCatalog(const std::string& address) {
+    try {
+        nlohmann::json list = nlohmann::json::array();
+        for (const auto& item : repo_.ListAssetCatalog(address)) {
+            list.push_back({{"kind", item.kind}, {"asset_id", item.asset_id},
+                            {"name", item.name}, {"symbol", item.symbol},
+                            {"contract_address", item.contract_address},
+                            {"asset_type", item.asset_type}, {"decimals", item.decimals},
+                            {"is_added", item.is_added}});
+        }
+        return Ok({{"list", list}, {"total", list.size()}});
+    } catch (const std::exception& e) { return Err(500, e.what()); }
+}
+
 nlohmann::json BalanceController::Get(const std::string& address,
                                       const std::string& asset_type) {
     try {

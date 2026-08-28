@@ -21,7 +21,10 @@ public:
 
     nlohmann::json AssociateErc20(const std::string& address,
                                   const std::string& contract_address);
+    nlohmann::json RemoveErc20(const std::string& address,
+                               const std::string& contract_address);
     nlohmann::json ListErc20(const std::string& address);
+    nlohmann::json AssetCatalog(const std::string& address);
 
 private:
     BalanceRepo& repo_;

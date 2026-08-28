@@ -23,6 +23,16 @@ struct Erc20BalanceItem {
     std::string contract_address;
     std::string balance;  // uint256 十进制字符串
 };
+struct AssetCatalogItem {
+    std::string kind;
+    std::string asset_id;
+    std::string name;
+    std::string symbol;
+    std::string contract_address;
+    std::string asset_type;
+    int decimals{8};
+    bool is_added{false};
+};
 
 // 三类余额表读写：OHI、提案 hash 资产、ERC20
 class BalanceRepo {
@@ -47,7 +57,9 @@ public:
                              const nlohmann::json& execution_result);
 
     bool AssociateErc20(const std::string& account, const std::string& contract);
+    bool RemoveErc20(const std::string& account, const std::string& contract);
     std::vector<Erc20BalanceItem> ListErc20(const std::string& account);
+    std::vector<AssetCatalogItem> ListAssetCatalog(const std::string& account);
 
 private:
     DbPool& pool_;

@@ -3,6 +3,7 @@
 #include "model/transaction.h"
 #include "parser/parsers/claim_parser.h"
 #include "parser/parsers/contract_parser.h"
+#include "parser/parsers/fund_parser.h"
 #include "parser/parsers/deinvest_parser.h"
 #include "parser/parsers/invest_parser.h"
 #include "parser/parsers/lock_parser.h"
@@ -402,4 +403,31 @@ TEST(ParserTest, ClaimParserMissingData) {
     auto tx = MakeTx(99, "addr_claim");
     ClaimParser p;
     EXPECT_TRUE(p.Parse(tx).empty());
+}
+
+// ---- FUND / ERC20 transfer ----
+
+TEST(ParserTest, FundParserAtHeight70Shape) {
+    Transaction tx;
+    tx.hash = "0x198779ef24a367cfa8ff92665054088f77454b89f763f15f9dbfcee3fab85370";
+    tx.identity = "0x458e53542299BeC018A6118c7544C44d3b8911Df";
+    tx.type = 8;
+    tx.time = 1787988242436320ULL;
+    tx.data = R"({"txInfo":{"input":"0xa9059cbb00000000000000000000000026e733e5481c079abf859dda613931298c9f0251000000000000000000000000000000000000000000000000000000012a05f200","recipient":"0x77c835D837666B7A23131A46bda35E6325E36e1B","sender":"0x755Ccf704E17570b64E247f0794314e4C8E542CA"}})";
+
+    FundParser parser;
+    auto records = parser.Parse(tx);
+    ASSERT_EQ(records.size(), 1);
+    EXPECT_EQ(records[0].sender, "0x755Ccf704E17570b64E247f0794314e4C8E542CA");
+    EXPECT_EQ(records[0].recipient, "0x26e733e5481c079abf859dda613931298c9f0251");
+    EXPECT_EQ(records[0].contract_address, "0x77c835D837666B7A23131A46bda35E6325E36e1B");
+    EXPECT_EQ(records[0].amount, "5000000000");
+}
+
+TEST(ParserTest, FundParserIgnoresOtherContractCalls) {
+    Transaction tx;
+    tx.type = 8;
+    tx.data = R"({"txInfo":{"input":"0x12345678"}})";
+    FundParser parser;
+    EXPECT_TRUE(parser.Parse(tx).empty());
 }

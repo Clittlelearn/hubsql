@@ -12,6 +12,7 @@ deploy/mysql-portable/lib/
 deploy/mysql-portable/share/
 deploy/mysql-portable/data/
 deploy/mysql-portable/run/
+deploy/mysql-portable/man/
 
 # IDE
 .vscode/
