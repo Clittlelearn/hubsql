@@ -70,7 +70,7 @@ nlohmann::json BalanceController::AssetCatalog(const std::string& address) {
                             {"name", item.name}, {"symbol", item.symbol},
                             {"contract_address", item.contract_address},
                             {"asset_type", item.asset_type}, {"decimals", item.decimals},
-                            {"is_added", item.is_added}});
+                            {"is_added", item.is_added}, {"is_flow_in", item.is_flow_in}});
         }
         return Ok({{"list", list}, {"total", list.size()}});
     } catch (const std::exception& e) { return Err(500, e.what()); }

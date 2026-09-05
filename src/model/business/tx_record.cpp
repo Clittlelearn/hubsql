@@ -8,6 +8,8 @@ nlohmann::json TxRecord::ToJson() const {
     j["block_height"] = block_height;
     j["tx_type"]      = tx_type;
     if (!utxo_json.empty()) {
+        // 保留数据库中的原始 JSON 文本，供客户端按需展开查看。
+        j["utxo_raw"] = utxo_json;
         try {
             j["utxo"] = nlohmann::json::parse(utxo_json);
         } catch (...) {

@@ -37,9 +37,8 @@ int ProposalModule::Process(sql::Connection& conn, const Transaction& tx,
 
 nlohmann::json ProposalModule::List(const nlohmann::json& filter, int page,
                                     int size) {
-    const std::string addr = filter.value("address", "");
     const int rv           = filter.value("is_revoked", -1);  // -1=全部
-    auto result            = repo_.Query(addr, rv, page, size);
+    auto result            = repo_.Query(rv, page, size);
 
     nlohmann::json list = nlohmann::json::array();
     for (auto& rec : result.items) list.push_back(rec.ToJson());

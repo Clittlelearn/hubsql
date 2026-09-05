@@ -177,6 +177,16 @@ void BalanceRepo::ApplyErc20Transfers(sql::Connection& conn, const Transaction& 
                               const std::string& to,
                               const std::string& amount,
                               uint32_t event_index) {
+        // 已跃入提案的 ERC20 属于本地资产，由 proposal_asset_balances 维护。
+        std::unique_ptr<sql::PreparedStatement> local(conn.prepareStatement(
+            "SELECT 1 FROM proposals p WHERE "
+            "LOWER(JSON_UNQUOTE(JSON_EXTRACT(p.tx_info,'$.tokenContractAddr'))) = LOWER(?) AND "
+            "(p.asset = 'OHI' OR EXISTS(SELECT 1 FROM contract_records cr "
+            "WHERE cr.is_flow_in=1 AND cr.asset_type=p.asset)) LIMIT 1"));
+        local->setString(1, contract);
+        std::unique_ptr<sql::ResultSet> local_rs(local->executeQuery());
+        if (local_rs->next()) return;
+
         std::unique_ptr<sql::PreparedStatement> c(conn.prepareStatement(
             "INSERT IGNORE INTO erc20_contracts(contract_address,deploy_tx_hash,deployer_address) VALUES(?,?,?)"));
         c->setString(1, contract); c->setString(2, tx.type == 7 ? tx.hash : "");
@@ -265,6 +275,7 @@ std::vector<AssetCatalogItem> BalanceRepo::ListAssetCatalog(const std::string& a
             "SELECT asset,COALESCE(JSON_UNQUOTE(JSON_EXTRACT(tx_info,'$.name')),''),"
             "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(tx_info,'$.tokenContractAddr')),''),"
             "COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(tx_info,'$.tokenDecimals')) AS UNSIGNED),8),"
+            "EXISTS(SELECT 1 FROM contract_records cr WHERE cr.is_flow_in=1 AND cr.asset_type=proposals.asset),"
             "EXISTS(SELECT 1 FROM proposal_asset_balances b WHERE b.address=? AND b.asset_type=proposals.asset) "
             "FROM proposals ORDER BY is_first DESC,id"));
         proposals->setString(1, account);
@@ -278,7 +289,8 @@ std::vector<AssetCatalogItem> BalanceRepo::ListAssetCatalog(const std::string& a
             item.symbol = item.asset_type == "OHI" ? "OHI" : item.name;
             item.contract_address = Lower(ToStd(pr->getString(3)));
             item.decimals = pr->getInt(4);
-            item.is_added = pr->getBoolean(5) || item.asset_type == "OHI";
+            item.is_flow_in = pr->getBoolean(5);
+            item.is_added = pr->getBoolean(6) || item.asset_type == "OHI";
             out.push_back(std::move(item));
         }
         std::unique_ptr<sql::PreparedStatement> contracts(conn.prepareStatement(

@@ -38,8 +38,8 @@ public:
     bool HasOhieProposal(sql::Connection& conn);
 
     // 查询；is_revoked: -1=全部, 0=未撤销, 1=已撤销
-    ProposalQueryResult Query(const std::string& address, int is_revoked,
-                              int page, int size);
+    // 提案是全链公共数据，不按账户地址过滤。
+    ProposalQueryResult Query(int is_revoked, int page, int size);
 
     int64_t Count();
     int64_t CountRevoked();

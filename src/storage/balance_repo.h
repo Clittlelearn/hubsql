@@ -32,6 +32,7 @@ struct AssetCatalogItem {
     std::string asset_type;
     int decimals{8};
     bool is_added{false};
+    bool is_flow_in{false};
 };
 
 // 三类余额表读写：OHI、提案 hash 资产、ERC20

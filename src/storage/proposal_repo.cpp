@@ -58,8 +58,7 @@ bool ProposalRepo::HasOhieProposal(sql::Connection& conn) {
     return res->next() && res->getInt64(1) > 0;
 }
 
-ProposalQueryResult ProposalRepo::Query(const std::string& address,
-                                        int is_revoked, int page, int size) {
+ProposalQueryResult ProposalRepo::Query(int is_revoked, int page, int size) {
     return pool_.WithConnection([&](sql::Connection& conn) -> ProposalQueryResult {
         ProposalQueryResult result;
         const std::string cond = is_revoked >= 0 ? " AND is_revoked = ?" : "";
@@ -67,11 +66,8 @@ ProposalQueryResult ProposalRepo::Query(const std::string& address,
         // 总条数
         {
             std::unique_ptr<sql::PreparedStatement> pstmt(conn.prepareStatement(
-                "SELECT COUNT(*) FROM proposals "
-                "WHERE (? = '' OR address = ?)" + cond));
-            pstmt->setString(1, address);
-            pstmt->setString(2, address);
-            if (is_revoked >= 0) pstmt->setInt(3, is_revoked);
+                "SELECT COUNT(*) FROM proposals WHERE 1=1" + cond));
+            if (is_revoked >= 0) pstmt->setInt(1, is_revoked);
             std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
             result.total = res->next() ? res->getInt64(1) : 0;
         }
@@ -81,12 +77,10 @@ ProposalQueryResult ProposalRepo::Query(const std::string& address,
             std::unique_ptr<sql::PreparedStatement> pstmt(conn.prepareStatement(
                 "SELECT tx_hash, asset, block_height, address, tx_info, "
                 "vote_count, is_first, is_revoked, revoke_tx_hash, revoke_time "
-                "FROM proposals "
-                "WHERE (? = '' OR address = ?)" + cond +
-                " ORDER BY block_height DESC LIMIT ? OFFSET ?"));
-            pstmt->setString(1, address);
-            pstmt->setString(2, address);
-            int idx = 3;
+                "FROM proposals WHERE 1=1" + cond +
+                " ORDER BY CAST(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(tx_info,'$.beginTime')),'0') AS UNSIGNED) DESC, "
+                "block_height DESC LIMIT ? OFFSET ?"));
+            int idx = 1;
             if (is_revoked >= 0) pstmt->setInt(idx++, is_revoked);
             pstmt->setInt(idx++, size);
             pstmt->setInt(idx, (page - 1) * size);
