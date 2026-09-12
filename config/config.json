@@ -1,6 +1,6 @@
 {
   "chain": {
-    "base_url": "http://127.0.0.1:13134",
+    "base_url": "http://222.128.23.254:13134",
     "start_height": 0,
     "sync_interval_seconds": 3,
     "batch_size": 50,
