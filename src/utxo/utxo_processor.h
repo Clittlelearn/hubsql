@@ -4,6 +4,8 @@
 #include <string>
 #include <unordered_map>
 
+#include <boost/multiprecision/cpp_int.hpp>
+
 #include "model/block.h"
 #include "utxo/utxo_store.h"
 
@@ -34,7 +36,8 @@ public:
     explicit UtxoProcessor(UtxoStore& store);
 
     // 返回: (地址, 资产类型) -> 余额增量（可为负，仅统计真实地址）
-    std::unordered_map<BalanceKey, int64_t, BalanceKeyHash> ProcessBlock(const Block& block);
+    std::unordered_map<BalanceKey, boost::multiprecision::cpp_int, BalanceKeyHash>
+    ProcessBlock(const Block& block);
 
 private:
     UtxoStore& store_;

@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "parser/parsers/parser_util.h"
 #include "utxo/utxo_common.h"
 
 namespace hubsql {
@@ -29,13 +30,14 @@ std::vector<ContractRecord> ContractParser::Parse(const Transaction& tx) {
         !is_deploy && ti.value("callType", "") == "FlowOutTx";
 
     // 跃入金额 = 跃入交易中真实地址 vout 之和；跃出金额 = VirtualCallFlowOutBurnGas vout 值
-    int64_t flow_in_amount = 0, flow_out_amount = 0;
+    boost::multiprecision::cpp_int flow_in_amount = 0, flow_out_amount = 0;
     for (const auto& u : tx.utxos) {
         for (const auto& vo : u.vout) {
             if (vo.addr == "VirtualCallFlowOutBurnGas") {
-                flow_out_amount += std::stoll(vo.value);
+                flow_out_amount += boost::multiprecision::cpp_int(UtxoValueToRaw(vo.value));
             } else if (!IsVirtualAddr(vo.addr)) {
-                if (is_flow_in) flow_in_amount += std::stoll(vo.value);
+                if (is_flow_in)
+                    flow_in_amount += boost::multiprecision::cpp_int(UtxoValueToRaw(vo.value));
             }
         }
     }
@@ -48,8 +50,8 @@ std::vector<ContractRecord> ContractParser::Parse(const Transaction& tx) {
     rec.tx_type         = is_deploy ? "deploy" : "call";
     rec.is_flow_in      = is_flow_in;
     rec.is_flow_out     = is_flow_out;
-    rec.flow_in_amount  = std::to_string(flow_in_amount);
-    rec.flow_out_amount = std::to_string(flow_out_amount);
+    rec.flow_in_amount  = flow_in_amount.convert_to<std::string>();
+    rec.flow_out_amount = flow_out_amount.convert_to<std::string>();
     rec.asset_type      = tx.utxos[0].assetType;  // 跃入跃出资产类型（OHI 或 hash）
     rec.tx_info         = ti.dump();               // txInfo (json)
     rec.time            = tx.time;

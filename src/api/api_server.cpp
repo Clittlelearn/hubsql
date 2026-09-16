@@ -299,6 +299,12 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
             [balance_ctrl](const crow::request&, std::string address) mutable {
                 return JsonRespond(balance_ctrl.ListErc20(address));
             });
+    // Flow 等业务读取区块索引余额，不受 Wallet 的“添加 Token”关系限制。
+    impl_->app.route_dynamic("/api/v1/accounts/<string>/indexed-erc20-balances")
+        .methods(crow::HTTPMethod::GET)(
+            [balance_ctrl](const crow::request&, std::string address) mutable {
+                return JsonRespond(balance_ctrl.ListIndexedErc20(address));
+            });
     impl_->app.route_dynamic("/api/v1/accounts/<string>/erc20-contracts/<string>")
         .methods(crow::HTTPMethod::DELETE, crow::HTTPMethod::OPTIONS)(
             [balance_ctrl](const crow::request& req, std::string address,

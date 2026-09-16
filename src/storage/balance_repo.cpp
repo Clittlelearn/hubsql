@@ -1,4 +1,5 @@
 #include "storage/balance_repo.h"
+#include "storage/erc20_parameter_parser.h"
 
 #include <cppconn/connection.h>
 #include <cppconn/prepared_statement.h>
@@ -31,49 +32,13 @@ std::string HexToDec(const std::string& hex) {
     return n.convert_to<std::string>();
 }
 
-struct Erc20CallTransfer {
-    std::string contract;
-    std::string from;
-    std::string to;
-    std::string amount;
-};
-
-std::optional<Erc20CallTransfer> ParseErc20CallTransfer(
-    const Transaction& tx, const nlohmann::json& info) {
-    if (tx.type != 8) return std::nullopt;
-
-    std::string input = Lower(info.value("input", ""));
-    if (input.rfind("0x", 0) == 0) input.erase(0, 2);
-    const std::string contract = Lower(info.value("recipient", ""));
-    if (contract.empty()) return std::nullopt;
-
-    Erc20CallTransfer transfer;
-    transfer.contract = contract;
-    if (input.size() >= 8 + 64 + 64 && input.substr(0, 8) == "a9059cbb") {
-        // transfer(address to, uint256 amount)
-        transfer.from = Lower(info.value("sender", tx.identity));
-        transfer.to = "0x" + input.substr(8 + 24, 40);
-        transfer.amount = HexToDec(input.substr(8 + 64, 64));
-    } else if (input.size() >= 8 + 64 * 3 && input.substr(0, 8) == "23b872dd") {
-        // transferFrom(address from, address to, uint256 amount)
-        transfer.from = "0x" + input.substr(8 + 24, 40);
-        transfer.to = "0x" + input.substr(8 + 64 + 24, 40);
-        transfer.amount = HexToDec(input.substr(8 + 64 * 2, 64));
-    } else {
-        return std::nullopt;
-    }
-
-    if (transfer.from.empty() || transfer.to.empty() || transfer.amount.empty()) {
-        return std::nullopt;
-    }
-    return transfer;
-}
 }  // namespace
 
 BalanceRepo::BalanceRepo(DbPool& pool) : pool_(pool) {}
 
 void BalanceRepo::ApplyDeltas(
-    const std::unordered_map<BalanceKey, int64_t, BalanceKeyHash>& deltas) {
+    const std::unordered_map<BalanceKey, boost::multiprecision::cpp_int,
+                             BalanceKeyHash>& deltas) {
     if (deltas.empty()) return;
 
     pool_.WithConnection([&](sql::Connection& conn) {
@@ -81,13 +46,38 @@ void BalanceRepo::ApplyDeltas(
         try {
             for (const auto& [key, diff] : deltas) {
                 const bool ohi = key.asset_type == "OHI";
-                std::unique_ptr<sql::PreparedStatement> pstmt(conn.prepareStatement(
-                    ohi ? "INSERT INTO ohi_balances (address,balance) VALUES (?,?) ON DUPLICATE KEY UPDATE balance=balance+VALUES(balance)"
-                        : "INSERT INTO proposal_asset_balances (address,asset_type,balance) VALUES (?,?,?) ON DUPLICATE KEY UPDATE balance=balance+VALUES(balance)"));
-                pstmt->setString(1, key.address);
-                if (ohi) pstmt->setInt64(2, diff);
-                else { pstmt->setString(2, key.asset_type); pstmt->setInt64(3, diff); }
-                pstmt->executeUpdate();
+                std::unique_ptr<sql::PreparedStatement> select(conn.prepareStatement(
+                    ohi ? "SELECT balance FROM ohi_balances WHERE address=? FOR UPDATE"
+                        : "SELECT balance FROM proposal_asset_balances WHERE address=? AND asset_type=? FOR UPDATE"));
+                select->setString(1, key.address);
+                if (!ohi) select->setString(2, key.asset_type);
+                std::unique_ptr<sql::ResultSet> rs(select->executeQuery());
+                const bool exists = rs->next();
+                const boost::multiprecision::cpp_int current =
+                    exists ? boost::multiprecision::cpp_int(ToStd(rs->getString(1))) : 0;
+                const boost::multiprecision::cpp_int next = current + diff;
+                if (next < 0) throw std::runtime_error("balance cannot be negative");
+
+                if (exists) {
+                    std::unique_ptr<sql::PreparedStatement> update(conn.prepareStatement(
+                        ohi ? "UPDATE ohi_balances SET balance=? WHERE address=?"
+                            : "UPDATE proposal_asset_balances SET balance=? WHERE address=? AND asset_type=?"));
+                    update->setString(1, next.convert_to<std::string>());
+                    update->setString(2, key.address);
+                    if (!ohi) update->setString(3, key.asset_type);
+                    update->executeUpdate();
+                } else {
+                    std::unique_ptr<sql::PreparedStatement> insert(conn.prepareStatement(
+                        ohi ? "INSERT INTO ohi_balances(address,balance) VALUES(?,?)"
+                            : "INSERT INTO proposal_asset_balances(address,asset_type,balance) VALUES(?,?,?)"));
+                    insert->setString(1, key.address);
+                    if (ohi) insert->setString(2, next.convert_to<std::string>());
+                    else {
+                        insert->setString(2, key.asset_type);
+                        insert->setString(3, next.convert_to<std::string>());
+                    }
+                    insert->executeUpdate();
+                }
             }
             conn.commit();
         } catch (...) {
@@ -99,9 +89,9 @@ void BalanceRepo::ApplyDeltas(
     });
 }
 
-std::optional<int64_t> BalanceRepo::GetBalance(const std::string& addr,
-                                               const std::string& asset_type) {
-    return pool_.WithConnection([&](sql::Connection& conn) -> std::optional<int64_t> {
+std::optional<std::string> BalanceRepo::GetBalance(const std::string& addr,
+                                                   const std::string& asset_type) {
+    return pool_.WithConnection([&](sql::Connection& conn) -> std::optional<std::string> {
         if (!asset_type.empty()) {
             std::unique_ptr<sql::PreparedStatement> pstmt(conn.prepareStatement(
                 asset_type == "OHI"
@@ -110,7 +100,7 @@ std::optional<int64_t> BalanceRepo::GetBalance(const std::string& addr,
             pstmt->setString(1, addr);
             if (asset_type != "OHI") pstmt->setString(2, asset_type);
             std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
-            if (res->next()) return res->getInt64(1);
+            if (res->next()) return ToStd(res->getString(1));
             return std::nullopt;
         }
         // 未指定资产：返回该地址任意一条
@@ -118,7 +108,7 @@ std::optional<int64_t> BalanceRepo::GetBalance(const std::string& addr,
             "SELECT balance FROM ohi_balances WHERE address = ? LIMIT 1"));
         pstmt->setString(1, addr);
         std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
-        if (res->next()) return res->getInt64(1);
+        if (res->next()) return ToStd(res->getString(1));
         return std::nullopt;
     });
 }
@@ -129,39 +119,45 @@ std::vector<BalanceItem> BalanceRepo::ListAll(const std::string& asset_type) {
         if (!asset_type.empty()) {
             std::unique_ptr<sql::PreparedStatement> pstmt(conn.prepareStatement(
                 asset_type == "OHI"
-                  ? "SELECT address, 'OHI' asset_type, balance FROM ohi_balances ORDER BY balance DESC"
-                  : "SELECT address, asset_type, balance FROM proposal_asset_balances WHERE asset_type=? ORDER BY balance DESC"));
+                  ? "SELECT address, 'OHI' asset_type, balance FROM ohi_balances"
+                  : "SELECT address, asset_type, balance FROM proposal_asset_balances WHERE asset_type=?"));
             if (asset_type != "OHI") pstmt->setString(1, asset_type);
             std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
             while (res->next()) {
                 out.push_back({ToStd(res->getString("address")),
                                ToStd(res->getString("asset_type")),
-                               res->getInt64("balance")});
+                               ToStd(res->getString("balance"))});
             }
         } else {
             std::unique_ptr<sql::Statement> stmt(conn.createStatement());
             std::unique_ptr<sql::ResultSet> res(stmt->executeQuery(
-                "SELECT address, asset_type, balance FROM (SELECT address,'OHI' asset_type,balance FROM ohi_balances UNION ALL SELECT address,asset_type,balance FROM proposal_asset_balances) b ORDER BY balance DESC"));
+                "SELECT address, asset_type, balance FROM (SELECT address,'OHI' asset_type,balance FROM ohi_balances UNION ALL SELECT address,asset_type,balance FROM proposal_asset_balances) b"));
             while (res->next()) {
                 out.push_back({ToStd(res->getString("address")),
                                ToStd(res->getString("asset_type")),
-                               res->getInt64("balance")});
+                               ToStd(res->getString("balance"))});
             }
         }
+        std::sort(out.begin(), out.end(), [](const BalanceItem& a, const BalanceItem& b) {
+            return boost::multiprecision::cpp_int(a.balance) >
+                   boost::multiprecision::cpp_int(b.balance);
+        });
         return out;
     });
 }
 
-int64_t BalanceRepo::TotalBalance(const std::string& asset_type) {
-    return pool_.WithConnection([&](sql::Connection& conn) -> int64_t {
+std::string BalanceRepo::TotalBalance(const std::string& asset_type) {
+    return pool_.WithConnection([&](sql::Connection& conn) -> std::string {
         std::unique_ptr<sql::PreparedStatement> pstmt(conn.prepareStatement(
             asset_type.empty()
-              ? "SELECT COALESCE(SUM(balance),0) FROM (SELECT balance FROM ohi_balances UNION ALL SELECT balance FROM proposal_asset_balances) b"
-              : asset_type == "OHI" ? "SELECT COALESCE(SUM(balance),0) FROM ohi_balances"
-              : "SELECT COALESCE(SUM(balance),0) FROM proposal_asset_balances WHERE asset_type=?"));
+              ? "SELECT balance FROM (SELECT balance FROM ohi_balances UNION ALL SELECT balance FROM proposal_asset_balances) b"
+              : asset_type == "OHI" ? "SELECT balance FROM ohi_balances"
+              : "SELECT balance FROM proposal_asset_balances WHERE asset_type=?"));
         if (!asset_type.empty() && asset_type != "OHI") pstmt->setString(1, asset_type);
         std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
-        return res->next() ? res->getInt64(1) : 0;
+        boost::multiprecision::cpp_int total = 0;
+        while (res->next()) total += boost::multiprecision::cpp_int(ToStd(res->getString(1)));
+        return total.convert_to<std::string>();
     });
 }
 
@@ -177,16 +173,6 @@ void BalanceRepo::ApplyErc20Transfers(sql::Connection& conn, const Transaction& 
                               const std::string& to,
                               const std::string& amount,
                               uint32_t event_index) {
-        // 已跃入提案的 ERC20 属于本地资产，由 proposal_asset_balances 维护。
-        std::unique_ptr<sql::PreparedStatement> local(conn.prepareStatement(
-            "SELECT 1 FROM proposals p WHERE "
-            "LOWER(JSON_UNQUOTE(JSON_EXTRACT(p.tx_info,'$.tokenContractAddr'))) = LOWER(?) AND "
-            "(p.asset = 'OHI' OR EXISTS(SELECT 1 FROM contract_records cr "
-            "WHERE cr.is_flow_in=1 AND cr.asset_type=p.asset)) LIMIT 1"));
-        local->setString(1, contract);
-        std::unique_ptr<sql::ResultSet> local_rs(local->executeQuery());
-        if (local_rs->next()) return;
-
         std::unique_ptr<sql::PreparedStatement> c(conn.prepareStatement(
             "INSERT IGNORE INTO erc20_contracts(contract_address,deploy_tx_hash,deployer_address) VALUES(?,?,?)"));
         c->setString(1, contract); c->setString(2, tx.type == 7 ? tx.hash : "");
@@ -211,9 +197,9 @@ void BalanceRepo::ApplyErc20Transfers(sql::Connection& conn, const Transaction& 
         apply(from, false); apply(to, true);
     };
 
-    // 对标准 ERC20 transfer/transferFrom，calldata 是金额与账户的主来源。
-    // 即使节点没有返回 blocks.data[txHash].log，也能正确入账。
-    if (auto transfer = ParseErc20CallTransfer(tx, info)) {
+    // 部署初始发行、transfer/transferFrom、FlowIn/FlowOut 均以交易参数为
+    // 金额与账户的主来源，即使节点没有 EVM log 也能正确入账。
+    if (auto transfer = ParseErc20ParameterTransfer(tx, info)) {
         apply_transfer(transfer->contract, transfer->from, transfer->to,
                        transfer->amount, 0);
         return;
@@ -264,6 +250,22 @@ std::vector<Erc20BalanceItem> BalanceRepo::ListErc20(const std::string& account)
             "SELECT a.contract_address,COALESCE(b.balance,'0') balance FROM account_erc20_contracts a LEFT JOIN erc20_balances b ON b.contract_address=a.contract_address AND b.account_address=a.account_address WHERE a.account_address=? ORDER BY a.created_at"));
         p->setString(1, Lower(account)); std::unique_ptr<sql::ResultSet> rs(p->executeQuery());
         while (rs->next()) out.push_back({ToStd(rs->getString(1)), ToStd(rs->getString(2))});
+        return out;
+    });
+}
+
+std::vector<Erc20BalanceItem> BalanceRepo::ListIndexedErc20(
+    const std::string& account) {
+    return pool_.WithConnection([&](sql::Connection& conn) {
+        std::vector<Erc20BalanceItem> out;
+        std::unique_ptr<sql::PreparedStatement> p(conn.prepareStatement(
+            "SELECT contract_address,balance FROM erc20_balances "
+            "WHERE account_address=? ORDER BY contract_address"));
+        p->setString(1, Lower(account));
+        std::unique_ptr<sql::ResultSet> rs(p->executeQuery());
+        while (rs->next()) {
+            out.push_back({ToStd(rs->getString(1)), ToStd(rs->getString(2))});
+        }
         return out;
     });
 }

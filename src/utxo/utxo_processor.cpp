@@ -5,6 +5,7 @@
 #include <utility>
 
 #include <nlohmann/json.hpp>
+#include <boost/multiprecision/cpp_int.hpp>
 
 #include "utxo/utxo_common.h"
 
@@ -46,9 +47,10 @@ std::string GetRedeemHash(const Transaction& tx) {
 
 UtxoProcessor::UtxoProcessor(UtxoStore& store) : store_(store) {}
 
-std::unordered_map<BalanceKey, int64_t, BalanceKeyHash>
+std::unordered_map<BalanceKey, boost::multiprecision::cpp_int, BalanceKeyHash>
 UtxoProcessor::ProcessBlock(const Block& block) {
-    std::unordered_map<BalanceKey, int64_t, BalanceKeyHash> deltas;
+    std::unordered_map<BalanceKey, boost::multiprecision::cpp_int, BalanceKeyHash>
+        deltas;
 
     for (const auto& tx : block.txs) {
         const uint64_t ty = tx.type;
@@ -73,11 +75,11 @@ UtxoProcessor::ProcessBlock(const Block& block) {
 
                 auto unspent = store_.GetUnspentByTx(h);
                 // signer 在该父交易下、同资产类型的未消费输出之和
-                int64_t sum = 0;
+                boost::multiprecision::cpp_int sum = 0;
                 std::vector<const UtxoOut*> to_spend;
                 for (const auto& o : unspent) {
                     if (o.addr == signer && o.asset_type == asset_type) {
-                        sum += std::stoll(o.value);
+                        sum += boost::multiprecision::cpp_int(o.value);
                         to_spend.push_back(&o);
                     }
                 }
@@ -101,10 +103,12 @@ UtxoProcessor::ProcessBlock(const Block& block) {
             for (size_t vj = 0; vj < u.vout.size(); ++vj) {
                 const auto& vo = u.vout[vj];
                 if (IsVirtualAddr(vo.addr)) continue;
+                const std::string& raw_value = vo.value;
                 store_.Put(tx.hash, static_cast<uint32_t>(ui),
-                           static_cast<uint32_t>(vj), vo.addr, vo.value,
+                           static_cast<uint32_t>(vj), vo.addr, raw_value,
                            asset_type);
-                deltas[{vo.addr, asset_type}] += std::stoll(vo.value);
+                deltas[{vo.addr, asset_type}] +=
+                    boost::multiprecision::cpp_int(raw_value);
             }
         }
     }

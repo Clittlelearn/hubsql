@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     type         VARCHAR(32) NOT NULL COMMENT 'staking/unstaking/invest/...',
     from_addr    VARCHAR(128) NOT NULL,
     to_addr      VARCHAR(128) DEFAULT NULL,
-    amount       DECIMAL(36, 18) DEFAULT 0,
+    amount       VARCHAR(78) NOT NULL DEFAULT '0' COMMENT '8位原始金额',
     raw_json     JSON DEFAULT NULL COMMENT '原始数据留档',
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     KEY idx_block_height (block_height),
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS staking_records (
     tx_hash          VARCHAR(128) NOT NULL COMMENT '质押交易hash',
     block_height     BIGINT UNSIGNED NOT NULL COMMENT '质押所在区块高度',
     address          VARCHAR(128) NOT NULL COMMENT '质押人地址',
-    stake_amount     DECIMAL(36, 18) NOT NULL DEFAULT 0 COMMENT '质押金额',
+    stake_amount     VARCHAR(78) NOT NULL DEFAULT '0' COMMENT '8位原始质押金额',
     stake_time       BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '质押时间(微秒)',
     commission_rate  DECIMAL(10, 6) NOT NULL DEFAULT 0 COMMENT '佣金率(commissionRate)',
     stake_type       VARCHAR(32) NOT NULL DEFAULT '' COMMENT '质押类型(如 Net)',
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS investment_records (
     tx_hash           VARCHAR(128) NOT NULL COMMENT '投资交易hash',
     block_height      BIGINT UNSIGNED NOT NULL COMMENT '投资所在区块高度',
     address           VARCHAR(128) NOT NULL COMMENT '投资地址',
-    invest_amount     DECIMAL(36, 18) NOT NULL DEFAULT 0 COMMENT '投资金额',
+    invest_amount     VARCHAR(78) NOT NULL DEFAULT '0' COMMENT '8位原始投资金额',
     invest_time       BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '投资时间(微秒)',
     bonus_addr        VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'bonusAddr(被投资地址)',
     invest_type       VARCHAR(32) NOT NULL DEFAULT '' COMMENT '投资类型(如 Normal)',
@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS lock_records (
     block_height BIGINT UNSIGNED NOT NULL COMMENT '锁定所在区块高度',
     address VARCHAR(128) NOT NULL DEFAULT '' COMMENT '锁定地址',
     asset_type VARCHAR(128) NOT NULL DEFAULT '' COMMENT '锁定资产类型(hash或OHI)',
-    lock_amount DECIMAL(36,18) NOT NULL DEFAULT 0 COMMENT '锁定金额',
+    lock_amount VARCHAR(78) NOT NULL DEFAULT '0' COMMENT '8位原始锁定金额',
     lock_time BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '锁定时间(微秒)',
     lock_type VARCHAR(32) NOT NULL DEFAULT '' COMMENT '锁定类型(如 LockNet)',
     is_unlocked TINYINT NOT NULL DEFAULT 0 COMMENT '是否已解锁定(0=否 1=是，不删除记录)',
@@ -144,8 +144,8 @@ CREATE TABLE IF NOT EXISTS contract_records (
     tx_type VARCHAR(16) NOT NULL DEFAULT '' COMMENT 'deploy/call',
     is_flow_in TINYINT NOT NULL DEFAULT 0 COMMENT '是否合约跃入',
     is_flow_out TINYINT NOT NULL DEFAULT 0 COMMENT '是否合约跃出',
-    flow_in_amount DECIMAL(36,18) NOT NULL DEFAULT 0 COMMENT '跃入金额',
-    flow_out_amount DECIMAL(36,18) NOT NULL DEFAULT 0 COMMENT '跃出金额',
+    flow_in_amount VARCHAR(78) NOT NULL DEFAULT '0' COMMENT '8位原始跃入金额',
+    flow_out_amount VARCHAR(78) NOT NULL DEFAULT '0' COMMENT '8位原始跃出金额',
     asset_type VARCHAR(128) NOT NULL DEFAULT '' COMMENT '跃入跃出资产类型(hash或OHI)',
     tx_info JSON DEFAULT NULL COMMENT 'txInfo (json)',
     tx_time BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '交易时间(微秒)',
@@ -161,7 +161,7 @@ CREATE TABLE IF NOT EXISTS claim_records (
     block_height BIGINT UNSIGNED NOT NULL COMMENT '申领所在区块高度',
     address VARCHAR(128) NOT NULL DEFAULT '' COMMENT '申领地址',
     asset_type VARCHAR(128) NOT NULL DEFAULT '' COMMENT '申领资产类型(hash或OHI)',
-    claim_amount DECIMAL(36,18) NOT NULL DEFAULT 0 COMMENT '申领金额',
+    claim_amount VARCHAR(78) NOT NULL DEFAULT '0' COMMENT '8位原始申领金额',
     claim_time BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '申领时间(微秒)',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_tx_hash (tx_hash), KEY idx_address (address), KEY idx_asset_type (asset_type)
@@ -194,16 +194,15 @@ CREATE TABLE IF NOT EXISTS sync_status (
 -- 三类余额分表：原生 OHI、其他提案资产、EVM ERC20
 CREATE TABLE IF NOT EXISTS ohi_balances (
     address    VARCHAR(128) PRIMARY KEY,
-    balance    BIGINT NOT NULL DEFAULT 0,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    KEY idx_ohi_balance (balance)
+    balance    VARCHAR(78) NOT NULL DEFAULT '0' COMMENT '8位原始余额',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB COMMENT='OHI 原生资产余额';
 
 CREATE TABLE IF NOT EXISTS proposal_asset_balances (
     address VARCHAR(128) NOT NULL, asset_type VARCHAR(128) NOT NULL COMMENT '提案 hash',
-    balance BIGINT NOT NULL DEFAULT 0,
+    balance VARCHAR(78) NOT NULL DEFAULT '0' COMMENT '8位原始余额',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (address, asset_type), KEY idx_proposal_asset (asset_type, balance)
+    PRIMARY KEY (address, asset_type), KEY idx_proposal_asset (asset_type)
 ) ENGINE=InnoDB COMMENT='其他提案跃入资产余额';
 
 CREATE TABLE IF NOT EXISTS erc20_contracts (

@@ -342,7 +342,8 @@ TEST(ParserTest, ContractParserFlowIn) {
     EXPECT_EQ(recs[0].tx_type, "call");
     EXPECT_TRUE(recs[0].is_flow_in);
     EXPECT_FALSE(recs[0].is_flow_out);
-    EXPECT_EQ(recs[0].flow_in_amount, "5000000000000000");  // 跃入金额=真实vout之和
+    EXPECT_EQ(recs[0].flow_in_amount, "5000000000000000");
+    // 节点 UTXO 的值即为 8 位原始金额。
 }
 
 TEST(ParserTest, ContractParserFlowOut) {
@@ -364,7 +365,8 @@ TEST(ParserTest, ContractParserFlowOut) {
     ASSERT_EQ(recs.size(), 1);
     EXPECT_TRUE(recs[0].is_flow_out);
     EXPECT_FALSE(recs[0].is_flow_in);
-    EXPECT_EQ(recs[0].flow_out_amount, "100000000");  // 跃出金额=FlowOutBurnGas vout
+    EXPECT_EQ(recs[0].flow_out_amount, "100000000");
+    // 节点 UTXO 的值即为 8 位原始金额。
 }
 
 TEST(ParserTest, ContractParserUnknownType) {

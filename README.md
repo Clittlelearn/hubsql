@@ -62,6 +62,9 @@ cmake --build build -j
 ./build/src/hubsql config/config.json
 ```
 
+
+0x388814b3000000000000000000000000000000000000000000000000000000174876e800
+
 ### 6. 运行单元测试
 
 ```bash

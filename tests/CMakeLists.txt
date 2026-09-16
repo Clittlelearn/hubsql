@@ -1,6 +1,7 @@
 # 单元测试
 add_executable(hubsql_tests
   test_config.cpp
+  test_erc20_parameter_parser.cpp
   test_parser.cpp
 )
 target_link_libraries(hubsql_tests PRIVATE hubsql_core GTest::gtest_main)
