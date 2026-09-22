@@ -19,6 +19,7 @@
 #include "parser/parsers/tx_record_module.h"
 #include "parser/parsers/vote_module.h"
 #include "storage/balance_repo.h"
+#include "storage/block_repo.h"
 #include "storage/claim_repo.h"
 #include "storage/contract_repo.h"
 #include "storage/db_pool.h"
@@ -41,6 +42,7 @@ int main(int argc, char** argv) {
 
         hubsql::DbPool db_pool(cfg.mysql);
         hubsql::BalanceRepo balance_repo(db_pool);
+        hubsql::BlockRepo block_repo(db_pool);
         hubsql::StakingRepo staking_repo(db_pool);
         hubsql::InvestmentRepo investment_repo(db_pool);
         hubsql::ProposalRepo proposal_repo(db_pool);
@@ -60,7 +62,8 @@ int main(int argc, char** argv) {
         registry.Register(std::make_shared<hubsql::TxRecordModule>(tx_record_repo, 20));
         registry.Register(std::make_shared<hubsql::ContractModule>(contract_repo));
         registry.Register(std::make_shared<hubsql::ClaimModule>(claim_repo));
-        hubsql::BlockParser parser(store, balance_repo, registry, db_pool);
+        hubsql::BlockParser parser(store, balance_repo, block_repo, registry,
+                                   db_pool);
 
         auto http = std::make_shared<hubsql::HttpClient>(cfg.chain.http);
         hubsql::BlockFetcher fetcher(cfg.chain, http);

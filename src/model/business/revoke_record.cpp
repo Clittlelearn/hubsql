@@ -8,6 +8,8 @@ nlohmann::json RevokeRecord::ToJson() const {
     j["block_height"]   = block_height;
     j["address"]        = address;
     j["proposal_hash"]  = proposal_hash;
+    j["tx_info"]        = tx_info.empty() ? nlohmann::json::object()
+                                            : nlohmann::json::parse(tx_info);
     j["revoke_time"]    = time;
     return j;
 }

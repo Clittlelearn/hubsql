@@ -3,6 +3,7 @@
 #include "model/block.h"
 #include "parser/business_registry.h"
 #include "storage/balance_repo.h"
+#include "storage/block_repo.h"
 #include "storage/db_pool.h"
 #include "utxo/utxo_processor.h"
 #include "utxo/utxo_store.h"
@@ -14,6 +15,7 @@ namespace hubsql {
 class BlockParser {
 public:
     BlockParser(UtxoStore& utxo_store, BalanceRepo& balance_repo,
+                BlockRepo& block_repo,
                 BusinessRegistry& registry, DbPool& pool);
 
     // 解析并存储整个区块
@@ -22,6 +24,7 @@ public:
 private:
     UtxoProcessor processor_;
     BalanceRepo& balance_repo_;
+    BlockRepo& block_repo_;
     BusinessRegistry& registry_;
     DbPool& pool_;
 };

@@ -27,6 +27,9 @@ public:
     int Process(sql::Connection& conn, const Transaction& tx,
                 uint64_t block_height) override;
 
+    void OnBlockStart(sql::Connection& conn, uint64_t block_height,
+                      uint64_t block_time) override;
+
     nlohmann::json List(const nlohmann::json& filter, int page, int size) override;
     nlohmann::json Counts() override;
 

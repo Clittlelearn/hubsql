@@ -278,7 +278,8 @@ std::vector<AssetCatalogItem> BalanceRepo::ListAssetCatalog(const std::string& a
             "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(tx_info,'$.tokenContractAddr')),''),"
             "COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(tx_info,'$.tokenDecimals')) AS UNSIGNED),8),"
             "EXISTS(SELECT 1 FROM contract_records cr WHERE cr.is_flow_in=1 AND cr.asset_type=proposals.asset),"
-            "EXISTS(SELECT 1 FROM proposal_asset_balances b WHERE b.address=? AND b.asset_type=proposals.asset) "
+            "EXISTS(SELECT 1 FROM proposal_asset_balances b WHERE b.address=? AND b.asset_type=proposals.asset),"
+            "native_flow_state "
             "FROM proposals ORDER BY is_first DESC,id"));
         proposals->setString(1, account);
         std::unique_ptr<sql::ResultSet> pr(proposals->executeQuery());
@@ -293,6 +294,8 @@ std::vector<AssetCatalogItem> BalanceRepo::ListAssetCatalog(const std::string& a
             item.decimals = pr->getInt(4);
             item.is_flow_in = pr->getBoolean(5);
             item.is_added = pr->getBoolean(6) || item.asset_type == "OHI";
+            item.native_flow_state = ToStd(pr->getString(7));
+            item.is_native_flow_active = item.native_flow_state == "active";
             out.push_back(std::move(item));
         }
         std::unique_ptr<sql::PreparedStatement> contracts(conn.prepareStatement(

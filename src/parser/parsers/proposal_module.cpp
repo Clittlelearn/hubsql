@@ -29,10 +29,15 @@ int ProposalModule::Process(sql::Connection& conn, const Transaction& tx,
     for (auto& r : revoke_parser_.Parse(tx)) {
         r.block_height = block_height;
         const std::string asset = NormalizeProposalAsset(r.proposal_hash);
-        repo_.MarkRevoked(conn, asset, r.tx_hash, r.time);
+        repo_.ScheduleRevoke(conn, asset, r.tx_hash, r.tx_info, r.time);
         ++n;
     }
     return n;
+}
+
+void ProposalModule::OnBlockStart(sql::Connection& conn, uint64_t block_height,
+                                  uint64_t block_time) {
+    repo_.FinalizeNativeFlow(conn, block_height, block_time);
 }
 
 nlohmann::json ProposalModule::List(const nlohmann::json& filter, int page,

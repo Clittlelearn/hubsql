@@ -222,6 +222,7 @@ TEST(ParserTest, RevokeParser) {
     ASSERT_EQ(recs.size(), 1);
     EXPECT_EQ(recs[0].tx_hash, "0xrevoke1");
     EXPECT_EQ(recs[0].proposal_hash, "0xOHI");
+    EXPECT_EQ(nlohmann::json::parse(recs[0].tx_info)["proposalHash"], "0xOHI");
     EXPECT_EQ(recs[0].time, 1787280245333273ULL);
 }
 

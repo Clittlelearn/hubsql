@@ -16,13 +16,19 @@ CREATE TABLE IF NOT EXISTS proposals (
     is_first        TINYINT NOT NULL DEFAULT 0 COMMENT '是否第一笔提案(OHI提案)',
     is_revoked      TINYINT NOT NULL DEFAULT 0 COMMENT '是否已撤销(0=否 1=是，不删除记录)',
     revoke_tx_hash  VARCHAR(128) DEFAULT NULL COMMENT '撤销提案交易hash',
+    revoke_tx_info  JSON DEFAULT NULL COMMENT '撤销提案 txInfo',
     revoke_time     BIGINT UNSIGNED DEFAULT NULL COMMENT '撤销时间(微秒)',
+    native_flow_state VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending/active/missing/revoked/ineligible',
+    revoke_state VARCHAR(16) NOT NULL DEFAULT 'none' COMMENT 'none/pending/revoked/missing',
+    finalized_height BIGINT UNSIGNED DEFAULT NULL,
+    finalized_time BIGINT UNSIGNED DEFAULT NULL COMMENT '裁决区块时间(微秒)',
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_tx_hash (tx_hash),
     UNIQUE KEY uk_asset (asset),
     KEY idx_address (address),
     KEY idx_is_revoked (is_revoked),
-    KEY idx_vote_count (vote_count)
+    KEY idx_vote_count (vote_count),
+    KEY idx_native_flow_state (native_flow_state)
 ) ENGINE=InnoDB COMMENT='提案记录(撤销以标记形式存在)';
 
 CREATE TABLE IF NOT EXISTS votes (

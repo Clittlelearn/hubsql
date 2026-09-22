@@ -26,9 +26,15 @@ public:
     // 提案：插入一条记录（幂等，按 tx_hash/asset 去重；在调用方事务内执行）
     void Insert(sql::Connection& conn, const ProposalRecord& rec);
 
-    // 撤销提案：仅标记（不删除）
-    void MarkRevoked(sql::Connection& conn, const std::string& asset,
-                     const std::string& revoke_tx_hash, uint64_t revoke_time);
+    // 撤销提案：先记录为待裁决，跨过投票结束区块后才改变资产状态。
+    void ScheduleRevoke(sql::Connection& conn, const std::string& asset,
+                        const std::string& revoke_tx_hash,
+                        const std::string& revoke_tx_info,
+                        uint64_t revoke_time);
+
+    // 使用当前区块时间和当前区块之前已入库的投票，镜像链上 Native Flow 裁决。
+    void FinalizeNativeFlow(sql::Connection& conn, uint64_t block_height,
+                            uint64_t block_time);
 
     // 投票：累加提案投票数量
     void IncrementVoteCount(sql::Connection& conn, const std::string& asset,

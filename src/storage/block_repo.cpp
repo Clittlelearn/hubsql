@@ -14,10 +14,11 @@ BlockRepo::BlockRepo(DbPool& pool) : pool_(pool) {}
 void BlockRepo::Insert(sql::Connection& conn, const Block& block) {
     std::unique_ptr<sql::PreparedStatement> pstmt(conn.prepareStatement(
         "INSERT IGNORE INTO blocks (height, hash, timestamp, tx_count, parse_status) "
-        "VALUES (?, ?, 0, ?, 1)"));
+        "VALUES (?, ?, ?, ?, 1)"));
     pstmt->setUInt64(1, block.blocks.height);
     pstmt->setString(2, block.blocks.hash);
-    pstmt->setUInt(3, static_cast<unsigned int>(block.txs.size()));
+    pstmt->setUInt64(3, block.blocks.time);
+    pstmt->setUInt(4, static_cast<unsigned int>(block.txs.size()));
     pstmt->executeUpdate();
 }
 

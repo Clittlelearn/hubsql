@@ -7,9 +7,11 @@
 namespace hubsql {
 
 BlockParser::BlockParser(UtxoStore& utxo_store, BalanceRepo& balance_repo,
+                         BlockRepo& block_repo,
                          BusinessRegistry& registry, DbPool& pool)
     : processor_(utxo_store),
       balance_repo_(balance_repo),
+      block_repo_(block_repo),
       registry_(registry),
       pool_(pool) {}
 
@@ -25,6 +27,10 @@ void BlockParser::ParseAndStore(const Block& block) {
     pool_.WithConnection([&](sql::Connection& conn) {
         conn.setAutoCommit(false);
         try {
+            block_repo_.Insert(conn, block);
+            for (auto* m : registry_.All()) {
+                m->OnBlockStart(conn, block.blocks.height, block.blocks.time);
+            }
             for (const auto& tx : block.txs) {
                 // ERC20 余额与业务记录共用区块事务，失败时一起回滚。
                 balance_repo_.ApplyErc20Transfers(

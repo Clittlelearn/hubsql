@@ -13,6 +13,7 @@ struct RevokeRecord {
     uint64_t block_height{0};     // 撤销所在区块高度
     std::string address;          // 撤销人地址
     std::string proposal_hash;    // 被撤销的提案（第一笔为 OHI，否则为提案hash）
+    std::string tx_info;          // 撤销提案 txInfo（用于区块边界裁决）
     uint64_t time{0};             // 撤销时间（微秒）
 
     nlohmann::json ToJson() const;

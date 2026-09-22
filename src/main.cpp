@@ -131,7 +131,7 @@ int main(int argc, char** argv) {
             std::make_shared<hubsql::FundModule>(fund_repo));
 
         // ---- 解析层：UTXO 规则 + 余额落库 + 注册表分发业务解析 ----
-        hubsql::BlockParser block_parser(utxo_store, balance_repo,
+        hubsql::BlockParser block_parser(utxo_store, balance_repo, block_repo,
                                          business_registry, db_pool);
 
         // ---- 同步调度（后台线程）----

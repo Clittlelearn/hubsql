@@ -35,6 +35,14 @@ public:
     virtual int Process(sql::Connection& conn, const Transaction& tx,
                         uint64_t block_height) = 0;
 
+    // 在处理当前区块交易前回调。治理裁决必须只读取父状态，不能把当前块投票算进去。
+    virtual void OnBlockStart(sql::Connection& conn, uint64_t block_height,
+                              uint64_t block_time) {
+        (void)conn;
+        (void)block_height;
+        (void)block_time;
+    }
+
     // 区块内全部交易处理完后回调（默认空实现）；可用于滚动清理等
     virtual void OnBlockEnd(sql::Connection& conn, uint64_t block_height) {
         (void)conn;
