@@ -6,7 +6,22 @@
 
 namespace hubsql {
 
-BalanceController::BalanceController(BalanceRepo& repo) : repo_(repo) {}
+BalanceController::BalanceController(BalanceRepo& repo, std::string rpc_url)
+    : repo_(repo), metadata_(std::make_shared<TokenMetadataReader>(std::move(rpc_url))) {}
+
+nlohmann::json BalanceController::TokenMetadata(std::string contract) {
+    if (contract.size() != 42 || contract.rfind("0x", 0) != 0 ||
+        !std::all_of(contract.begin() + 2, contract.end(), [](unsigned char c) { return std::isxdigit(c); }))
+        return Err(400, "Invalid contract address");
+    std::transform(contract.begin(), contract.end(), contract.begin(), [](unsigned char c) { return std::tolower(c); });
+    try {
+        const auto catalog = repo_.ListAssetCatalog("");
+        if (std::none_of(catalog.begin(), catalog.end(), [&](const auto& item) {
+            return item.kind == "erc20" && item.contract_address == contract;
+        })) return Err(404, "Contract not indexed");
+        return Ok(metadata_->Read(contract));
+    } catch (const std::exception& e) { return Err(503, e.what()); }
+}
 
 nlohmann::json BalanceController::List(const std::string& asset_type,
                                        int page, int size) {
@@ -88,7 +103,7 @@ nlohmann::json BalanceController::AssetCatalog(const std::string& address) {
                             {"native_flow_state", item.native_flow_state},
                             {"is_native_flow_active", item.is_native_flow_active}});
         }
-        return Ok({{"list", list}, {"total", list.size()}});
+        return Ok({{"list", list}, {"total", list.size()}, {"metadata_supported", true}});
     } catch (const std::exception& e) { return Err(500, e.what()); }
 }
 
@@ -103,17 +118,11 @@ nlohmann::json BalanceController::Get(const std::string& address,
                        {"balance", *bal}});
         }
         // 未指定资产：返回该地址全部资产余额
-        auto all = repo_.ListAll();
+        auto all = repo_.ListForAddress(address);
         nlohmann::json assets = nlohmann::json::array();
-        bool found = false;
         for (const auto& item : all) {
-            if (item.address == address) {
-                assets.push_back({{"asset_type", item.asset_type},
-                                  {"balance", item.balance}});
-                found = true;
-            }
+            assets.push_back({{"asset_type", item.asset_type}, {"balance", item.balance}});
         }
-        if (!found) return Err(404, "address not found");
         return Ok({{"address", address}, {"balances", assets}});
     } catch (const std::exception& e) {
         return Err(500, e.what());

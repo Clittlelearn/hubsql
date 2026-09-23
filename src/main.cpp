@@ -148,7 +148,7 @@ int main(int argc, char** argv) {
 
         // ---- REST API 服务（后台线程）----
         hubsql::ApiServer api(cfg.api, db_pool, block_repo, tx_repo,
-                              business_registry, balance_repo);
+                              business_registry, balance_repo, cfg.chain.base_url);
         std::jthread api_thread([&api] {
             try {
                 api.Run();

@@ -16,7 +16,7 @@ class ApiServer {
 public:
     ApiServer(const ApiConfig& cfg, DbPool& pool,
               BlockRepo& blocks, TxRepo& txs, BusinessRegistry& registry,
-              BalanceRepo& balances);
+              BalanceRepo& balances, const std::string& rpc_url = "");
     ~ApiServer();
 
     ApiServer(const ApiServer&) = delete;

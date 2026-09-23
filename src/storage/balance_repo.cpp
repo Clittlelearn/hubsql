@@ -146,6 +146,20 @@ std::vector<BalanceItem> BalanceRepo::ListAll(const std::string& asset_type) {
     });
 }
 
+std::vector<BalanceItem> BalanceRepo::ListForAddress(const std::string& address) {
+    return pool_.WithConnection([&](sql::Connection& conn) {
+        std::vector<BalanceItem> out;
+        std::unique_ptr<sql::PreparedStatement> stmt(conn.prepareStatement(
+            "SELECT address,'OHI' asset_type,balance FROM ohi_balances WHERE LOWER(address)=? "
+            "UNION ALL SELECT address,asset_type,balance FROM proposal_asset_balances WHERE LOWER(address)=?"));
+        stmt->setString(1, Lower(address));
+        stmt->setString(2, Lower(address));
+        std::unique_ptr<sql::ResultSet> rows(stmt->executeQuery());
+        while (rows->next()) out.push_back({ToStd(rows->getString(1)), ToStd(rows->getString(2)), ToStd(rows->getString(3))});
+        return out;
+    });
+}
+
 std::string BalanceRepo::TotalBalance(const std::string& asset_type) {
     return pool_.WithConnection([&](sql::Connection& conn) -> std::string {
         std::unique_ptr<sql::PreparedStatement> pstmt(conn.prepareStatement(

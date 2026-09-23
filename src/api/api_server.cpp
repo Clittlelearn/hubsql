@@ -62,7 +62,7 @@ struct ApiServer::Impl {
 
 ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
                      BlockRepo& blocks, TxRepo& txs, BusinessRegistry& registry,
-                     BalanceRepo& balances)
+                     BalanceRepo& balances, const std::string& rpc_url)
     : impl_(std::make_unique<Impl>()) {
     impl_->cfg = cfg;
     impl_->app.get_middleware<crow::CORSHandler>()
@@ -74,7 +74,7 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
     BlockController block_ctrl(blocks);
     TxController tx_ctrl(txs);
     BusinessController business_ctrl(registry, blocks, txs);
-    BalanceController balance_ctrl(balances);
+    BalanceController balance_ctrl(balances, rpc_url);
 
     // ---- 健康检查 ----
     impl_->app.route_dynamic("/health")([](const crow::request&) {
@@ -316,6 +316,11 @@ ApiServer::ApiServer(const ApiConfig& cfg, DbPool& pool,
         .methods(crow::HTTPMethod::GET)(
             [balance_ctrl](const crow::request& req) mutable {
                 return JsonRespond(balance_ctrl.AssetCatalog(GetStr(req, "address")));
+            });
+    impl_->app.route_dynamic("/api/v1/assets/<string>/metadata")
+        .methods(crow::HTTPMethod::GET)(
+            [balance_ctrl](const crow::request&, std::string contract) mutable {
+                return JsonRespond(balance_ctrl.TokenMetadata(std::move(contract)));
             });
 
     impl_->app.port(cfg.port).bindaddr(cfg.host).multithreaded();

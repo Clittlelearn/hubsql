@@ -54,6 +54,7 @@ public:
 
     // 全部余额（按余额降序）；asset_type 为空 = 全部资产，否则只取该资产
     std::vector<BalanceItem> ListAll(const std::string& asset_type = "");
+    std::vector<BalanceItem> ListForAddress(const std::string& address);
 
     // 某资产总余额（asset_type 为空 = 全部资产求和）
     std::string TotalBalance(const std::string& asset_type = "");

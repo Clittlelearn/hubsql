@@ -5,13 +5,14 @@
 #include <nlohmann/json.hpp>
 
 #include "storage/balance_repo.h"
+#include "api/token_metadata.h"
 
 namespace hubsql {
 
 // 账户余额查询控制器（按地址 + 资产类型）
 class BalanceController {
 public:
-    explicit BalanceController(BalanceRepo& repo);
+    explicit BalanceController(BalanceRepo& repo, std::string rpc_url = "");
 
     // 全部余额（分页，按余额降序）；asset_type 为空 = 全部资产
     nlohmann::json List(const std::string& asset_type, int page, int size);
@@ -26,9 +27,11 @@ public:
     nlohmann::json ListErc20(const std::string& address);
     nlohmann::json ListIndexedErc20(const std::string& address);
     nlohmann::json AssetCatalog(const std::string& address);
+    nlohmann::json TokenMetadata(std::string contract);
 
 private:
     BalanceRepo& repo_;
+    std::shared_ptr<TokenMetadataReader> metadata_;
 };
 
 }  // namespace hubsql
