@@ -1,6 +1,7 @@
 #pragma once
 
 #include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -36,7 +37,9 @@ public:
     int PoolSize() const { return cfg_.pool_size; }
 
 private:
-    void Release(sql::Connection* conn);
+    friend class DbPoolTestPeer;
+    void Release(sql::Connection* conn) noexcept;
+    void DropSlot();
     std::unique_ptr<sql::Connection> CreateConnection();
 
     MysqlConfig cfg_;
@@ -44,6 +47,7 @@ private:
     std::condition_variable cv_;
     std::vector<std::unique_ptr<sql::Connection>> idle_;
     int total_{0};
+    std::function<std::unique_ptr<sql::Connection>()> connection_factory_;
 };
 
 }  // namespace hubsql

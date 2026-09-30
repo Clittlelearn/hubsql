@@ -28,6 +28,10 @@ struct MysqlConfig {
     std::string password;
     std::string database;
     int pool_size{10};
+    int pool_acquire_timeout_ms{5000};
+    int connect_timeout_seconds{5};
+    int read_timeout_seconds{30};
+    int write_timeout_seconds{30};
 };
 
 struct ApiConfig {

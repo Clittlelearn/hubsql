@@ -29,6 +29,21 @@ TEST(ConfigTest, MissingSectionsUseDefaults) {
     EXPECT_EQ(cfg.mysql.host, "127.0.0.1");
     EXPECT_EQ(cfg.api.threads, 4);
     EXPECT_EQ(cfg.chain.http.timeout_ms, 10000);
+    EXPECT_EQ(cfg.mysql.pool_acquire_timeout_ms, 5000);
+    EXPECT_EQ(cfg.mysql.connect_timeout_seconds, 5);
+    EXPECT_EQ(cfg.mysql.read_timeout_seconds, 30);
+    EXPECT_EQ(cfg.mysql.write_timeout_seconds, 30);
+}
+
+TEST(ConfigTest, MysqlPoolTimeoutsAreConfigurable) {
+    auto cfg = AppConfig::FromJson(R"({"mysql": {
+        "pool_acquire_timeout_ms": 1500, "connect_timeout_seconds": 2,
+        "read_timeout_seconds": 60, "write_timeout_seconds": 45
+    }})"_json);
+    EXPECT_EQ(cfg.mysql.pool_acquire_timeout_ms, 1500);
+    EXPECT_EQ(cfg.mysql.connect_timeout_seconds, 2);
+    EXPECT_EQ(cfg.mysql.read_timeout_seconds, 60);
+    EXPECT_EQ(cfg.mysql.write_timeout_seconds, 45);
 }
 
 TEST(ConfigTest, LoadFromFileWorks) {

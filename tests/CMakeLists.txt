@@ -1,11 +1,12 @@
 # 单元测试
 add_executable(hubsql_tests
   test_config.cpp
+  test_db_pool.cpp
   test_token_metadata.cpp
   test_erc20_parameter_parser.cpp
   test_parser.cpp
 )
-target_link_libraries(hubsql_tests PRIVATE hubsql_core GTest::gtest_main)
+target_link_libraries(hubsql_tests PRIVATE hubsql_core GTest::gtest_main GTest::gmock)
 include(GoogleTest)
 gtest_discover_tests(hubsql_tests)
 

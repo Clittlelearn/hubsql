@@ -27,6 +27,10 @@ AppConfig AppConfig::FromJson(const nlohmann::json& j) {
     cfg.mysql.password = mysql.value("password", "");
     cfg.mysql.database = mysql.value("database", "");
     cfg.mysql.pool_size= mysql.value("pool_size", 10);
+    cfg.mysql.pool_acquire_timeout_ms = mysql.value("pool_acquire_timeout_ms", 5000);
+    cfg.mysql.connect_timeout_seconds = mysql.value("connect_timeout_seconds", 5);
+    cfg.mysql.read_timeout_seconds = mysql.value("read_timeout_seconds", 30);
+    cfg.mysql.write_timeout_seconds = mysql.value("write_timeout_seconds", 30);
 
     const auto& api = j.value("api", nlohmann::json::object());
     cfg.api.host    = api.value("host", "0.0.0.0");
